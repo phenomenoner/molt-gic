@@ -883,6 +883,7 @@ def artifact_rules(typ: str) -> dict[str, Any]:
 def plugin_dry_run(db: str, route: str = "local") -> dict[str, Any]:
     receipt_id = new_id("dry")
     event = {"mode": "dry_run", "gateway_route": route, "receipt_id": receipt_id, "status": "ok", "would_call_cli": True, "live": False}
+    init_db(db)
     with connect(db) as conn:
         conn.execute("INSERT INTO plugin_events(id,mode,gateway_route,receipt_id,status,detail_json,created_at) VALUES(?,?,?,?,?,?,?)",
                      (new_id("plug"), "dry_run", route, receipt_id, "ok", json_dumps(event), now()))
@@ -896,6 +897,7 @@ def plugin_smoke(db: str, route: str = "local", confirm: bool = False, mutate_ru
         raise PermissionError("confirm_required")
     receipt_id = new_id("live")
     event = {"mode": "live", "gateway_route": route, "receipt_id": receipt_id, "status": "ok", "live": True, "bounded": True}
+    init_db(db)
     if gateway_url:
         payload = json_dumps({"kind": "molt_gic_smoke", "route": route, "receipt_id": receipt_id}).encode("utf-8")
         req = urllib.request.Request(gateway_url, data=payload, headers={"content-type": "application/json"}, method="POST")
