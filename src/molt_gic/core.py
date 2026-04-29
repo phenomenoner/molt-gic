@@ -117,6 +117,16 @@ CREATE TABLE IF NOT EXISTS eval_examples (
   metadata_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS trace_sources (
+  id TEXT PRIMARY KEY,
+  artifact_id TEXT NOT NULL REFERENCES artifacts(id),
+  provenance_hash TEXT NOT NULL UNIQUE,
+  source_path TEXT NOT NULL,
+  redaction_status TEXT NOT NULL CHECK(redaction_status IN ('clean','redacted','blocked')),
+  promotion_status TEXT NOT NULL CHECK(promotion_status IN ('trace_mined','golden')) DEFAULT 'trace_mined',
+  receipt_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY,
   artifact_id TEXT NOT NULL REFERENCES artifacts(id),
@@ -711,9 +721,58 @@ def apply_revert(db: str, packet_id: str, reviewer: str, confirm: bool = False) 
 def export_db(db: str, out: str) -> None:
     with connect(db) as conn:
         data = {}
-        for table in ["artifacts", "artifact_versions", "eval_examples", "runs", "scores", "provider_runs", "trace_metrics", "gic_signatures", "gates", "packets", "decisions", "waivers", "lineage"]:
+        for table in ["artifacts", "artifact_versions", "eval_examples", "trace_sources", "runs", "scores", "provider_runs", "trace_metrics", "gic_signatures", "gates", "packets", "decisions", "waivers", "lineage"]:
             data[table] = [dict(r) for r in conn.execute(f"SELECT * FROM {table}")]
     write_text(out, json_dumps(data) + "\n")
+
+
+def redact_text(text: str) -> tuple[str, str]:
+    status = "clean"
+    redacted = text
+    for pat in SECRET_PATTERNS:
+        if pat.search(redacted):
+            status = "redacted"
+            redacted = pat.sub("[REDACTED]", redacted)
+    return redacted, status
+
+
+def trace_mine_import(db: str, artifact_id: str, file_path: str) -> dict[str, Any]:
+    imported = deduped = redacted_count = blocked = 0
+    with connect(db) as conn:
+        require_artifact(conn, artifact_id)
+        for line_no, line in enumerate(Path(file_path).read_text(encoding="utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            raw = json.loads(line)
+            payload = json_dumps(raw)
+            provenance = sha256_text(payload)
+            if fetch_one(conn, "SELECT id FROM trace_sources WHERE provenance_hash=?", (provenance,)):
+                deduped += 1
+                continue
+            text = str(raw.get("input") or raw.get("prompt") or raw.get("message") or "")
+            expected = str(raw.get("expected_behavior") or raw.get("expected") or "derived from trace behavior")
+            text, s1 = redact_text(text)
+            expected, s2 = redact_text(expected)
+            redaction_status = "redacted" if "redacted" in {s1, s2} else "clean"
+            if not text.strip():
+                blocked += 1
+                continue
+            trace_id = new_id("trace")
+            example_id = raw.get("id") or new_id("ex")
+            axes = raw.get("axis_tags") or ["context", "action", "closure"]
+            risk = raw.get("risk", "medium")
+            if risk not in RISK_WEIGHTS:
+                risk = "medium"
+            conn.execute("INSERT INTO trace_sources(id,artifact_id,provenance_hash,source_path,redaction_status,promotion_status,receipt_json,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                         (trace_id, artifact_id, provenance, str(Path(file_path)), redaction_status, "trace_mined", json_dumps({"line": line_no}), now()))
+            conn.execute("""INSERT OR REPLACE INTO eval_examples
+                (id,artifact_id,input,expected_behavior,axis_tags_json,risk,source,trust_weight,created_by,evidence_refs_json,metadata_json,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (example_id, artifact_id, text, expected, json_dumps(axes), risk, "trace_mined", float(raw.get("trust_weight", 0.7)), "trace_miner", json_dumps([trace_id]), json_dumps({"provenance_hash": provenance}), now()))
+            imported += 1
+            if redaction_status == "redacted":
+                redacted_count += 1
+    return {"status": "ok", "imported": imported, "deduped": deduped, "redacted": redacted_count, "blocked": blocked}
 
 
 def scan_path_for_secrets(path: str | Path) -> dict[str, Any]:

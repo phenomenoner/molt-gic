@@ -25,6 +25,7 @@ molt-gic adapter discover [--root PATH] [--json]
 molt-gic replay packet --packet PACKET_ID [--out-dir DIR] [--json]
 molt-gic pilot verify --artifact ID [--json]
 molt-gic provider doctor [--provider fixture] [--json]
+molt-gic trace mine import --artifact ID --file traces.jsonl [--json]
 ```
 
 `--review-only` restricts side effects to ledger and packet artifacts. It never applies local file changes.

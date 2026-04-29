@@ -33,6 +33,7 @@ from .core import (
     replay_packet,
     resume_run,
     scan_path_for_secrets,
+    trace_mine_import,
 )
 from .provider import ProviderError, doctor as provider_doctor
 
@@ -221,6 +222,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--provider", default="fixture")
     p.add_argument("--json", action="store_true")
 
+    trace = sub.add_parser("trace")
+    trace_sub = trace.add_subparsers(dest="action", required=True)
+    mine = trace_sub.add_parser("mine")
+    mine_sub = mine.add_subparsers(dest="mine_action", required=True)
+    p = mine_sub.add_parser("import")
+    p.add_argument("--db", default=".molt-gic.sqlite")
+    p.add_argument("--artifact", required=True)
+    p.add_argument("--file", required=True)
+    p.add_argument("--json", action="store_true")
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "init":
@@ -297,6 +308,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if result["status"] == "pass" else EXIT_GATE
         elif args.cmd == "provider" and args.action == "doctor":
             emit(provider_doctor(args.provider), args.json)
+        elif args.cmd == "trace" and args.action == "mine" and args.mine_action == "import":
+            emit(trace_mine_import(args.db, args.artifact, args.file), args.json)
         else:
             raise ValueError("unhandled command")
         return 0
