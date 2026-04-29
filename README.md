@@ -73,6 +73,7 @@ The public v1 plan is tracked in:
 - `docs/artifact-types.md`
 - `docs/openclaw-plugin-gateway.md`
 - `docs/openclaw-install-guide.md`
+- `docs/autonomy-loop.md`
 - `docs/dashboard.md`
 - `docs/release.md`
 - `docs/v1-pilot-report.md`

@@ -51,6 +51,17 @@ openclaw gateway call moltGic.smoke --json --token "$MOLT_GIC_GATEWAY_TOKEN" \
   --params '{"route":"openclaw-gateway","receipt_id":"manual_rpc_smoke"}'
 ```
 
+## Command surface
+
+The extension also registers an authorized command surface for operator-facing checks:
+
+```text
+/molt-gic status
+/molt-gic smoke
+```
+
+The command surface is deliberately inspect/smoke only. It does not expose evolve, apply, promote, or runtime config mutation.
+
 ## Receipt fields
 
 - mode

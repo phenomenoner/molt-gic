@@ -9,6 +9,8 @@ The extension exposes bounded smoke/inspection surfaces only:
 - HTTP smoke route: `POST /molt-gic/hook`
 - Gateway RPC: `moltGic.status`
 - Gateway RPC: `moltGic.smoke`
+- command: `/molt-gic status`
+- command: `/molt-gic smoke`
 
 It does not mutate OpenClaw runtime configuration, modify skills, promote packets, or apply local changes.
 
@@ -107,6 +109,20 @@ Expected:
 
 - `moltGic.status` returns `schema=molt-gic.gateway-rpc.status.v1`
 - `moltGic.smoke` returns `schema=molt-gic.gateway-hook.receipt.v1` and `status=ok`
+
+## Verify command surface
+
+After gateway restart, send these from an authorized OpenClaw chat surface:
+
+```text
+/molt-gic status
+/molt-gic smoke
+```
+
+Expected:
+
+- status reports the HTTP route, Gateway RPC methods, and blocked runtime config mutation.
+- smoke returns a bounded JSON receipt with `surface=command` and `status=ok`.
 
 ## Rollback
 

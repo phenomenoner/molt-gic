@@ -84,6 +84,7 @@ export default function register(api: OpenClawPluginApi) {
       http_route: true,
       methods: ["moltGic.status", "moltGic.smoke"],
       runtime_config_mutation: "blocked",
+      command_surface: "/molt-gic status|smoke|help",
     });
   });
 
@@ -91,5 +92,36 @@ export default function register(api: OpenClawPluginApi) {
     respond(true, buildRpcReceipt(routePath, (params ?? {}) as Record<string, unknown>));
   });
 
-  api.logger.info(`molt-gic-openclaw-extension: registered HTTP route ${routePath} and Gateway RPC methods`);
+
+  api.registerCommand({
+    name: "molt-gic",
+    nativeNames: { default: "molt-gic" },
+    description: "Inspect or smoke-test the bounded molt-gic OpenClaw bridge.",
+    acceptsArgs: true,
+    requireAuth: true,
+    handler: async (ctx) => {
+      const action = (ctx.args?.trim().split(/\s+/).filter(Boolean)[0] ?? "status").toLowerCase();
+      if (action === "help") {
+        return { text: "molt-gic commands: /molt-gic status, /molt-gic smoke. Bounded only: no evolve/apply/promote actions are exposed." };
+      }
+      if (action === "status") {
+        return {
+          text: [
+            "molt-gic OpenClaw bridge: ok",
+            `HTTP route: ${routePath}`,
+            "Gateway RPC: moltGic.status, moltGic.smoke",
+            "Command surface: /molt-gic status, /molt-gic smoke",
+            "Runtime config mutation: blocked",
+          ].join("\n"),
+        };
+      }
+      if (action === "smoke") {
+        const receipt = buildRpcReceipt(routePath, { route: "command", receipt_id: `cmd_${Date.now().toString(36)}` });
+        return { text: JSON.stringify({ surface: "command", ...receipt }) };
+      }
+      return { text: `Unknown molt-gic action: ${action}. Use /molt-gic help.`, isError: true };
+    },
+  });
+
+  api.logger.info(`molt-gic-openclaw-extension: registered HTTP route ${routePath}, Gateway RPC methods, and command surface`);
 }
