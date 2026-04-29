@@ -6,6 +6,7 @@ Global default DB path: `.molt-gic.sqlite`.
 molt-gic init [--db PATH] [--json]
 molt-gic artifact add --type skill --path PATH [--name NAME] [--json]
 molt-gic artifact list [--json]
+molt-gic artifact rules show --type skill|prompt|tool_description|route [--json]
 molt-gic dataset validate --file FILE [--json]
 molt-gic dataset import --artifact ID --source golden|trace_mined|synthetic --file FILE [--json]
 molt-gic dataset promote --example ID --reviewer NAME --reason TEXT [--json]

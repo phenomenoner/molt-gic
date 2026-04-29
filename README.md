@@ -69,4 +69,5 @@ The public v1 plan is tracked in:
 - `docs/v1-verifier-plan.md`
 - `docs/provider-adapters.md`
 - `docs/trace-mining.md`
+- `docs/artifact-types.md`
 

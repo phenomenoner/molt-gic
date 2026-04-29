@@ -8,7 +8,7 @@ Status: v0 implementation contract
 
 ## Non-goals
 
-v0 does not mutate live runtimes, auto-merge changes, post externally, train models, or manage secrets. Artifact scope is `skill` markdown only. Future artifact types are rejected in v0.
+v0 did not mutate live runtimes, auto-merge changes, post externally, train models, or manage secrets. v1 enables additional artifact families for review and evaluation while keeping higher-risk apply paths gated.
 
 ## Core loop
 

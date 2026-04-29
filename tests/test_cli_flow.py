@@ -68,13 +68,13 @@ def test_happy_path_review_packet(tmp_path: Path):
     assert json.loads(gates.stdout)["gates"]
 
 
-def test_disabled_artifact_exits_7(tmp_path: Path):
+def test_unknown_artifact_type_fails_validation(tmp_path: Path):
     skill, _ = write_fixture(tmp_path)
     db = tmp_path / "molt.sqlite"
     run_cli(tmp_path, "init", "--db", str(db))
-    proc = run_cli(tmp_path, "artifact", "add", "--db", str(db), "--type", "prompt", "--path", str(skill), check=False)
-    assert proc.returncode == 7
-    assert "artifact_type_disabled" in proc.stderr
+    proc = run_cli(tmp_path, "artifact", "add", "--db", str(db), "--type", "unknown", "--path", str(skill), check=False)
+    assert proc.returncode == 3
+    assert "unsupported artifact type" in proc.stderr
 
 
 def test_apply_requires_confirm_and_rejects_symlink(tmp_path: Path):

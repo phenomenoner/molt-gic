@@ -18,8 +18,8 @@ AXES = ["foundation", "context", "planning", "tools", "action", "closure"]
 AXIS_WEIGHTS = {"foundation": 1.1, "context": 1.0, "planning": 1.1, "tools": 1.0, "action": 1.4, "closure": 1.0}
 RISK_WEIGHTS = {"low": 1.0, "medium": 1.3, "high": 1.8}
 ALLOWED_SOURCES = {"golden", "trace_mined", "synthetic"}
-ALLOWED_ARTIFACT_TYPES = {"skill"}
-DISABLED_ARTIFACT_TYPES = {"prompt", "tool_description", "route"}
+ALLOWED_ARTIFACT_TYPES = {"skill", "prompt", "tool_description", "route"}
+REVIEW_ONLY_ARTIFACT_TYPES = {"prompt", "tool_description", "route"}
 
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
@@ -291,8 +291,6 @@ def canonicalize_registered_path(path: str | Path) -> Path:
 
 
 def add_artifact(db: str, typ: str, path: str, name: str | None = None) -> str:
-    if typ in DISABLED_ARTIFACT_TYPES:
-        raise PermissionError("artifact_type_disabled")
     if typ not in ALLOWED_ARTIFACT_TYPES:
         raise ValueError(f"unsupported artifact type: {typ}")
     p = canonicalize_registered_path(path)
@@ -685,6 +683,8 @@ def apply_local(db: str, packet_id: str, reviewer: str, confirm: bool = False) -
             raise ValueError("candidate version missing")
         cand = fetch_one(conn, "SELECT * FROM artifact_versions WHERE id=?", (run["candidate_version_id"],))
         artifact = require_artifact(conn, run["artifact_id"])
+        if artifact["type"] in REVIEW_ONLY_ARTIFACT_TYPES:
+            raise PermissionError("artifact_type_review_only")
         target = safe_registered_write_path(artifact["path"])
         write_text(target, cand["content"])
         readback = sha256_file(target)
@@ -705,6 +705,8 @@ def apply_revert(db: str, packet_id: str, reviewer: str, confirm: bool = False) 
             raise ValueError("packet not found")
         run = fetch_one(conn, "SELECT * FROM runs WHERE id=?", (packet["run_id"],))
         artifact = require_artifact(conn, run["artifact_id"])
+        if artifact["type"] in REVIEW_ONLY_ARTIFACT_TYPES:
+            raise PermissionError("artifact_type_review_only")
         baseline = latest_version(conn, artifact["id"], ("baseline",))
         target = safe_registered_write_path(artifact["path"])
         write_text(target, baseline["content"])
@@ -852,3 +854,16 @@ def pilot_verify(db: str, artifact_id: str) -> dict[str, Any]:
         gates = [] if not latest else [dict(r) for r in conn.execute("SELECT name,status,non_waivable FROM gates WHERE run_id=?", (latest["id"],))]
         ok = golden >= 10 and latest is not None and not any(g["status"] == "fail" and g["non_waivable"] for g in gates)
         return {"status": "pass" if ok else "fail", "golden_count": golden, "latest_run": latest["id"] if latest else None, "gates": gates}
+
+
+def artifact_rules(typ: str) -> dict[str, Any]:
+    if typ not in ALLOWED_ARTIFACT_TYPES:
+        raise ValueError(f"unsupported artifact type: {typ}")
+    masks = {
+        "skill": ["scope", "workflow", "output_rules", "verifier"],
+        "prompt": ["system", "developer", "examples", "output_contract"],
+        "tool_description": ["name", "description", "parameters", "safety"],
+        "route": ["match", "target", "fallback", "safety"],
+    }
+    apply_policy = "confirm_apply" if typ == "skill" else "review_only"
+    return {"artifact_type": typ, "enabled": True, "apply_policy": apply_policy, "mutation_masks": masks[typ]}

@@ -19,6 +19,7 @@ from .core import (
     apply_local,
     apply_revert,
     adapter_discover,
+    artifact_rules,
     build_packet,
     cancel_run,
     connect,
@@ -77,6 +78,11 @@ def main(argv: list[str] | None = None) -> int:
     p = art_sub.add_parser("list")
     p.add_argument("--db", default=".molt-gic.sqlite")
     p.add_argument("--json", action="store_true")
+    p = art_sub.add_parser("rules")
+    rules_sub = p.add_subparsers(dest="rules_action", required=True)
+    r = rules_sub.add_parser("show")
+    r.add_argument("--type", required=True)
+    r.add_argument("--json", action="store_true")
 
     ds = sub.add_parser("dataset")
     ds_sub = ds.add_subparsers(dest="action", required=True)
@@ -244,6 +250,8 @@ def main(argv: list[str] | None = None) -> int:
             with connect(args.db) as conn:
                 rows = [dict(r) for r in conn.execute("SELECT id,name,type,path,current_hash,enabled FROM artifacts ORDER BY id")]
             emit({"artifacts": rows}, args.json)
+        elif args.cmd == "artifact" and args.action == "rules" and args.rules_action == "show":
+            emit(artifact_rules(args.type), args.json)
         elif args.cmd == "dataset" and args.action == "validate":
             n = sum(1 for line in Path(args.file).read_text(encoding="utf-8").splitlines() if line.strip())
             emit({"status": "ok", "examples": n}, args.json)
