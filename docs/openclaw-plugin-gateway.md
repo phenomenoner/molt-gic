@@ -42,6 +42,9 @@ The optional OpenClaw extension also registers two Gateway RPC methods:
 
 - `moltGic.status` — read-only status and registered-surface summary.
 - `moltGic.smoke` — bounded RPC smoke receipt.
+- `moltGic.evolve` — bounded evolve receipt that updates the passive autonomy digest.
+- `moltGic.apply` — bounded apply receipt that updates the passive autonomy digest.
+- `moltGic.autonomyDigest` — current passive autonomy digest.
 
 Example:
 
@@ -49,6 +52,9 @@ Example:
 openclaw gateway call moltGic.status --json --token "$MOLT_GIC_GATEWAY_TOKEN"
 openclaw gateway call moltGic.smoke --json --token "$MOLT_GIC_GATEWAY_TOKEN" \
   --params '{"route":"openclaw-gateway","receipt_id":"manual_rpc_smoke"}'
+openclaw gateway call moltGic.evolve --json --token "$MOLT_GIC_GATEWAY_TOKEN"
+openclaw gateway call moltGic.apply --json --token "$MOLT_GIC_GATEWAY_TOKEN"
+openclaw gateway call moltGic.autonomyDigest --json --token "$MOLT_GIC_GATEWAY_TOKEN"
 ```
 
 ## Command surface
@@ -58,9 +64,12 @@ The extension also registers an authorized command surface for operator-facing c
 ```text
 /molt-gic status
 /molt-gic smoke
+/molt-gic evolve
+/molt-gic apply
+/molt-gic autonomy
 ```
 
-The command surface is deliberately inspect/smoke only. It does not expose evolve, apply, promote, or runtime config mutation.
+The command surface exposes bounded evolve/apply receipts and passive digest updates. Runtime config mutation remains blocked.
 
 ## Receipt fields
 

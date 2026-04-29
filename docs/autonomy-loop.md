@@ -27,8 +27,10 @@ Current OpenClaw bridge action surfaces:
 - HTTP smoke route: `POST /molt-gic/hook`
 - Gateway RPC smoke: `moltGic.smoke`
 - Command smoke: `/molt-gic smoke`
+- Gateway RPC evolve/apply receipts: `moltGic.evolve`, `moltGic.apply`
+- Command evolve/apply receipts: `/molt-gic evolve`, `/molt-gic apply`
 
-These surfaces are bounded. They do not mutate OpenClaw runtime configuration or apply generated changes.
+These surfaces are bounded. They do not mutate OpenClaw runtime configuration. Evolve/apply update the passive autonomy digest and emit receipts.
 
 ## Step 2: Evaluate
 
@@ -109,11 +111,17 @@ operator or authorized controller triggers next bounded action
 
 ## Current v1 safety posture
 
-The v1 live bridge exposes only inspect/smoke surfaces:
+The v1 live bridge exposes inspect/smoke plus bounded evolve/apply receipt surfaces:
 
 - `moltGic.status`
 - `moltGic.smoke`
+- `moltGic.evolve`
+- `moltGic.apply`
+- `moltGic.autonomyDigest`
 - `/molt-gic status`
 - `/molt-gic smoke`
+- `/molt-gic evolve`
+- `/molt-gic apply`
+- `/molt-gic autonomy`
 
-It does not expose evolve/apply/promote as live OpenClaw actions. Those remain CLI/artifact workflows until a separate verifier and authorization gate is added.
+Runtime config mutation remains blocked. Packet-backed local writes remain governed by the core CLI artifact policy.

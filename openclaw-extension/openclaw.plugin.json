@@ -1,9 +1,9 @@
 {
   "id": "molt-gic-openclaw-extension",
   "name": "molt-gic OpenClaw Extension",
-  "description": "Registers bounded gateway HTTP and RPC smoke surfaces for molt-gic live receipts.",
+  "description": "Bounded OpenClaw HTTP/RPC/command bridge with passive autonomy digest for molt-gic.",
   "kind": "utility",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

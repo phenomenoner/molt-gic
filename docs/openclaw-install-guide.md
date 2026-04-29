@@ -9,10 +9,16 @@ The extension exposes bounded smoke/inspection surfaces only:
 - HTTP smoke route: `POST /molt-gic/hook`
 - Gateway RPC: `moltGic.status`
 - Gateway RPC: `moltGic.smoke`
+- Gateway RPC: `moltGic.evolve`
+- Gateway RPC: `moltGic.apply`
+- Gateway RPC: `moltGic.autonomyDigest`
 - command: `/molt-gic status`
 - command: `/molt-gic smoke`
+- command: `/molt-gic evolve`
+- command: `/molt-gic apply`
+- command: `/molt-gic autonomy`
 
-It does not mutate OpenClaw runtime configuration, modify skills, promote packets, or apply local changes.
+It does not mutate OpenClaw runtime configuration. Evolve/apply surfaces emit bounded receipts and update the passive autonomy digest; packet-backed local writes remain constrained by the core CLI artifact policy.
 
 ## Prerequisites
 
@@ -56,6 +62,12 @@ Expected receipts include:
 openclaw plugins install ./openclaw-extension
 openclaw plugins enable molt-gic-openclaw-extension
 openclaw plugins inspect molt-gic-openclaw-extension
+```
+
+Enable the passive digest hook access:
+
+```bash
+openclaw config set plugins.entries.molt-gic-openclaw-extension.hooks.allowConversationAccess true --strict-json
 ```
 
 Expected inspect summary:
@@ -103,12 +115,18 @@ Use `openclaw gateway call` after restart:
 openclaw gateway call moltGic.status --json --token "$MOLT_GIC_GATEWAY_TOKEN"
 openclaw gateway call moltGic.smoke --json --token "$MOLT_GIC_GATEWAY_TOKEN" \
   --params '{"route":"openclaw-gateway","receipt_id":"manual_rpc_smoke"}'
+openclaw gateway call moltGic.evolve --json --token "$MOLT_GIC_GATEWAY_TOKEN"
+openclaw gateway call moltGic.apply --json --token "$MOLT_GIC_GATEWAY_TOKEN"
+openclaw gateway call moltGic.autonomyDigest --json --token "$MOLT_GIC_GATEWAY_TOKEN"
 ```
 
 Expected:
 
 - `moltGic.status` returns `schema=molt-gic.gateway-rpc.status.v1`
 - `moltGic.smoke` returns `schema=molt-gic.gateway-hook.receipt.v1` and `status=ok`
+- `moltGic.evolve` returns `schema=molt-gic.evolve.receipt.v1` and updates the digest.
+- `moltGic.apply` returns `schema=molt-gic.apply.receipt.v1` and updates the digest.
+- `moltGic.autonomyDigest` returns `schema=molt-gic.autonomy.digest.v1`.
 
 ## Verify command surface
 
@@ -117,12 +135,17 @@ After gateway restart, send these from an authorized OpenClaw chat surface:
 ```text
 /molt-gic status
 /molt-gic smoke
+/molt-gic evolve
+/molt-gic apply
+/molt-gic autonomy
 ```
 
 Expected:
 
 - status reports the HTTP route, Gateway RPC methods, and blocked runtime config mutation.
 - smoke returns a bounded JSON receipt with `surface=command` and `status=ok`.
+- evolve/apply return bounded JSON receipts and update the passive autonomy digest.
+- autonomy returns the current passive digest.
 
 ## Rollback
 
