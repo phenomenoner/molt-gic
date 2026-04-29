@@ -63,6 +63,7 @@ See `docs/product-spec.md` and `docs/dispatch-packets.md` for the public v0 cont
 
 The public v1 plan is tracked in:
 
+- `CHANGELOG.md`
 - `docs/v1-spec.md`
 - `docs/v1-roadmap.md`
 - `docs/v1-packets.md`
@@ -72,4 +73,4 @@ The public v1 plan is tracked in:
 - `docs/artifact-types.md`
 - `docs/openclaw-plugin-gateway.md`
 - `docs/dashboard.md`
-
+- `docs/release.md`

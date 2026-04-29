@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv sync --dev
+      - name: Tests
+        run: uv run pytest -q
+      - name: Smoke
+        run: python3 tools/smoke.py
+      - name: Build
+        run: uv build
+      - name: Release dry-run
+        run: python3 tools/release_dry_run.py --out release-dry-run.json
+      - name: Upload dry-run artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dry-run
+          path: release-dry-run.json
