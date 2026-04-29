@@ -33,6 +33,7 @@ from .core import (
     propose_candidate,
     pilot_verify,
     plugin_dry_run,
+    plugin_hook_spec,
     plugin_smoke,
     record_decision,
     replay_packet,
@@ -246,8 +247,12 @@ def main(argv: list[str] | None = None) -> int:
     p = plugin_sub.add_parser("smoke")
     p.add_argument("--db", default=".molt-gic.sqlite")
     p.add_argument("--route", default="local")
+    p.add_argument("--gateway-url")
     p.add_argument("--confirm", action="store_true")
     p.add_argument("--mutate-runtime-config", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p = plugin_sub.add_parser("hook-spec")
+    p.add_argument("--route", default="local")
     p.add_argument("--json", action="store_true")
 
     provider = sub.add_parser("provider")
@@ -349,7 +354,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "plugin" and args.action == "dry-run":
             emit(plugin_dry_run(args.db, args.route), args.json)
         elif args.cmd == "plugin" and args.action == "smoke":
-            emit(plugin_smoke(args.db, args.route, args.confirm, args.mutate_runtime_config), args.json)
+            emit(plugin_smoke(args.db, args.route, args.confirm, args.mutate_runtime_config, args.gateway_url), args.json)
+        elif args.cmd == "plugin" and args.action == "hook-spec":
+            emit(plugin_hook_spec(args.route), args.json)
         elif args.cmd == "dashboard" and args.action == "export":
             emit(dashboard_export(args.db, args.out), args.json)
         elif args.cmd == "dashboard" and args.action == "render":

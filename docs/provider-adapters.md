@@ -33,6 +33,27 @@ The fixture provider is deterministic and requires no network or secrets.
 molt-gic provider doctor --provider fixture --json
 ```
 
+## OpenAI-compatible provider
+
+The network adapter supports OpenAI-compatible `/chat/completions` endpoints.
+
+Required environment:
+
+```bash
+export MOLT_GIC_PROVIDER_BASE_URL="https://api.example.com/v1"
+export MOLT_GIC_PROVIDER_API_KEY="..."
+export MOLT_GIC_PROVIDER_MODEL="model-id"
+```
+
+Usage:
+
+```bash
+molt-gic provider doctor --provider openai_compatible --json
+molt-gic eval run --provider openai_compatible --judge-provider openai_compatible ...
+```
+
+Receipts record provider/model/version/latency/cost/retries without logging raw credentials.
+
 ## Error taxonomy
 
 - `config`: provider is unknown or missing required configuration.

@@ -7,6 +7,8 @@ import re
 import shutil
 import sqlite3
 import time
+import urllib.error
+import urllib.request
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -887,17 +889,40 @@ def plugin_dry_run(db: str, route: str = "local") -> dict[str, Any]:
     return event
 
 
-def plugin_smoke(db: str, route: str = "local", confirm: bool = False, mutate_runtime_config: bool = False) -> dict[str, Any]:
+def plugin_smoke(db: str, route: str = "local", confirm: bool = False, mutate_runtime_config: bool = False, gateway_url: str | None = None) -> dict[str, Any]:
     if mutate_runtime_config:
         raise PermissionError("runtime_config_mutation_blocked")
     if not confirm:
         raise PermissionError("confirm_required")
     receipt_id = new_id("live")
     event = {"mode": "live", "gateway_route": route, "receipt_id": receipt_id, "status": "ok", "live": True, "bounded": True}
+    if gateway_url:
+        payload = json_dumps({"kind": "molt_gic_smoke", "route": route, "receipt_id": receipt_id}).encode("utf-8")
+        req = urllib.request.Request(gateway_url, data=payload, headers={"content-type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = resp.read()
+                event["gateway_status"] = resp.status
+                event["gateway_body_hash"] = sha256_text(body.decode("utf-8", errors="replace"))
+        except urllib.error.URLError as exc:
+            raise PermissionError(f"gateway_smoke_failed:{getattr(exc, 'reason', exc)}") from exc
     with connect(db) as conn:
         conn.execute("INSERT INTO plugin_events(id,mode,gateway_route,receipt_id,status,detail_json,created_at) VALUES(?,?,?,?,?,?,?)",
                      (new_id("plug"), "live", route, receipt_id, "ok", json_dumps(event), now()))
     return event
+
+
+def plugin_hook_spec(route: str = "local") -> dict[str, Any]:
+    return {
+        "schema": "molt-gic.gateway-hook.v1",
+        "route": route,
+        "commands": {
+            "dry_run": "molt-gic plugin dry-run --json",
+            "smoke": "molt-gic plugin smoke --confirm --json",
+        },
+        "runtime_config_mutation": "blocked",
+        "receipt_fields": ["mode", "gateway_route", "receipt_id", "status", "live"],
+    }
 
 
 def dashboard_export(db: str, out: str) -> dict[str, Any]:

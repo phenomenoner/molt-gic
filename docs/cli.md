@@ -29,6 +29,7 @@ molt-gic provider doctor [--provider fixture] [--json]
 molt-gic trace mine import --artifact ID --file traces.jsonl [--json]
 molt-gic plugin dry-run [--route local] [--json]
 molt-gic plugin smoke [--route local] --confirm [--json]
+molt-gic plugin hook-spec [--route local] [--json]
 molt-gic dashboard export --out dashboard.json [--json]
 molt-gic dashboard render --snapshot dashboard.json --out dashboard.html [--json]
 ```

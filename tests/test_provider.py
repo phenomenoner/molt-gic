@@ -30,4 +30,4 @@ def test_unknown_provider_is_typed_config_error(tmp_path: Path):
 def test_bad_configured_real_provider_is_typed_config_error(tmp_path: Path):
     proc = cli(tmp_path, "provider", "doctor", "--provider", "openai", "--json", check=False)
     assert proc.returncode == 4
-    assert "requires credentials" in proc.stderr
+    assert "MOLT_GIC_PROVIDER_BASE_URL is required" in proc.stderr
