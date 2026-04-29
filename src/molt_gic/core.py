@@ -900,7 +900,12 @@ def plugin_smoke(db: str, route: str = "local", confirm: bool = False, mutate_ru
     init_db(db)
     if gateway_url:
         payload = json_dumps({"kind": "molt_gic_smoke", "route": route, "receipt_id": receipt_id}).encode("utf-8")
-        req = urllib.request.Request(gateway_url, data=payload, headers={"content-type": "application/json"}, method="POST")
+        headers = {"content-type": "application/json"}
+        gateway_token = os.environ.get("MOLT_GIC_GATEWAY_TOKEN")
+        if gateway_token:
+            headers["authorization"] = f"Bearer {gateway_token}"
+            headers["x-openclaw-gateway-token"] = gateway_token
+        req = urllib.request.Request(gateway_url, data=payload, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 body = resp.read()
