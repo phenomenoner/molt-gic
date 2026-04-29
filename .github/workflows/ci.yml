@@ -16,6 +16,8 @@ jobs:
         run: uv run pytest -q
       - name: Smoke
         run: python3 tools/smoke.py
+      - name: v1 pilot smoke
+        run: python3 tools/smoke_v1.py
       - name: Build
         run: uv build
       - name: Release dry-run

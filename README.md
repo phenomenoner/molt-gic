@@ -74,3 +74,4 @@ The public v1 plan is tracked in:
 - `docs/openclaw-plugin-gateway.md`
 - `docs/dashboard.md`
 - `docs/release.md`
+- `docs/v1-pilot-report.md`
