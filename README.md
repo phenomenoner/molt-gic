@@ -58,3 +58,13 @@ The smoke script creates a temporary local SQLite ledger, candidate, packet, and
 `molt-gic` does not modify a live agent runtime. `apply local` can write only to the registered artifact path after a `promote` decision and `--confirm`. Paths are canonicalized, symlink escapes are rejected, and the file hash is read back before an adoption state is recorded.
 
 See `docs/product-spec.md` and `docs/dispatch-packets.md` for the public v0 contract.
+
+## Roadmap
+
+The public v1 plan is tracked in:
+
+- `docs/v1-spec.md`
+- `docs/v1-roadmap.md`
+- `docs/v1-packets.md`
+- `docs/v1-verifier-plan.md`
+
