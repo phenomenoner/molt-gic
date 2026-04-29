@@ -23,6 +23,8 @@ from .core import (
     build_packet,
     cancel_run,
     connect,
+    dashboard_export,
+    dashboard_render,
     evaluate_run,
     export_db,
     import_examples,
@@ -67,6 +69,17 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("init")
     p.add_argument("--db", default=".molt-gic.sqlite")
     p.add_argument("--repo", default=".")
+    p.add_argument("--json", action="store_true")
+
+    dashboard = sub.add_parser("dashboard")
+    dashboard_sub = dashboard.add_subparsers(dest="action", required=True)
+    p = dashboard_sub.add_parser("export")
+    p.add_argument("--db", default=".molt-gic.sqlite")
+    p.add_argument("--out", required=True)
+    p.add_argument("--json", action="store_true")
+    p = dashboard_sub.add_parser("render")
+    p.add_argument("--snapshot", required=True)
+    p.add_argument("--out", required=True)
     p.add_argument("--json", action="store_true")
 
     art = sub.add_parser("artifact")
@@ -337,6 +350,10 @@ def main(argv: list[str] | None = None) -> int:
             emit(plugin_dry_run(args.db, args.route), args.json)
         elif args.cmd == "plugin" and args.action == "smoke":
             emit(plugin_smoke(args.db, args.route, args.confirm, args.mutate_runtime_config), args.json)
+        elif args.cmd == "dashboard" and args.action == "export":
+            emit(dashboard_export(args.db, args.out), args.json)
+        elif args.cmd == "dashboard" and args.action == "render":
+            emit(dashboard_render(args.snapshot, args.out), args.json)
         else:
             raise ValueError("unhandled command")
         return 0

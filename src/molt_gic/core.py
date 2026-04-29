@@ -898,3 +898,52 @@ def plugin_smoke(db: str, route: str = "local", confirm: bool = False, mutate_ru
         conn.execute("INSERT INTO plugin_events(id,mode,gateway_route,receipt_id,status,detail_json,created_at) VALUES(?,?,?,?,?,?,?)",
                      (new_id("plug"), "live", route, receipt_id, "ok", json_dumps(event), now()))
     return event
+
+
+def dashboard_export(db: str, out: str) -> dict[str, Any]:
+    with connect(db) as conn:
+        runs = [dict(r) for r in conn.execute("SELECT id,artifact_id,mode,status,recommendation_status,run_score,created_at FROM runs ORDER BY created_at DESC LIMIT 50")]
+        gates = [dict(r) for r in conn.execute("SELECT run_id,name,status,non_waivable,detail_json FROM gates ORDER BY created_at DESC LIMIT 200")]
+        packets = [dict(r) for r in conn.execute("SELECT id,run_id,recommendation_status,packet_json_path,packet_md_path,created_at FROM packets ORDER BY created_at DESC LIMIT 50")]
+        decisions = [dict(r) for r in conn.execute("SELECT id,packet_id,run_id,decision,reviewer,created_at FROM decisions ORDER BY created_at DESC LIMIT 50")]
+        lineage = [dict(r) for r in conn.execute("SELECT artifact_id,parent_version_id,child_version_id,reason,created_at FROM lineage ORDER BY created_at DESC LIMIT 100")]
+        providers = [dict(r) for r in conn.execute("SELECT run_id,provider,role,model,model_version,status,error_class,latency_ms,cost_usd FROM provider_runs ORDER BY created_at DESC LIMIT 200")]
+        plugin_events = [dict(r) for r in conn.execute("SELECT mode,gateway_route,receipt_id,status,detail_json,created_at FROM plugin_events ORDER BY created_at DESC LIMIT 50")]
+    snapshot = {
+        "schema": "molt-gic.dashboard.v1",
+        "read_only": True,
+        "generated_at": now(),
+        "runs": runs,
+        "gates": gates,
+        "packets": packets,
+        "decisions": decisions,
+        "lineage": lineage,
+        "provider_runs": providers,
+        "plugin_events": plugin_events,
+        "summary": {
+            "run_count": len(runs),
+            "failed_gate_count": sum(1 for g in gates if g["status"] == "fail"),
+            "packet_count": len(packets),
+        },
+    }
+    write_text(out, json_dumps(snapshot) + "\n")
+    return {"status": "ok", "out": out, "read_only": True, "run_count": len(runs), "failed_gate_count": snapshot["summary"]["failed_gate_count"]}
+
+
+def dashboard_render(snapshot_path: str, out: str) -> dict[str, Any]:
+    snap = json.loads(Path(snapshot_path).read_text(encoding="utf-8"))
+    rows = []
+    for run in snap.get("runs", []):
+        rows.append(f"<tr><td>{run['id']}</td><td>{run['artifact_id']}</td><td>{run['status']}</td><td>{run.get('recommendation_status')}</td></tr>")
+    html = f"""<!doctype html>
+<html><head><meta charset=\"utf-8\"><title>molt-gic dashboard</title></head>
+<body>
+<h1>molt-gic dashboard</h1>
+<p>Read-only snapshot generated at {snap.get('generated_at')}.</p>
+<p>Runs: {snap.get('summary',{}).get('run_count',0)}. Failed gates: {snap.get('summary',{}).get('failed_gate_count',0)}.</p>
+<table><thead><tr><th>Run</th><th>Artifact</th><th>Status</th><th>Recommendation</th></tr></thead><tbody>
+{''.join(rows)}
+</tbody></table>
+</body></html>"""
+    write_text(out, html)
+    return {"status": "ok", "out": out, "read_only": True}

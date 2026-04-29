@@ -40,6 +40,8 @@ def main() -> None:
     run("adapter", "discover", "--root", "examples", "--json")
     run("plugin", "dry-run", "--db", str(DB), "--route", "local", "--json")
     run("plugin", "smoke", "--db", str(DB), "--route", "local", "--confirm", "--json")
+    run("dashboard", "export", "--db", str(DB), "--out", "dashboard.json", "--json")
+    run("dashboard", "render", "--snapshot", "dashboard.json", "--out", "dashboard.html", "--json")
     run("db", "export", "--db", str(DB), "--out", "smoke-export.json", "--json")
     assert gates["gates"]
     assert (ROOT / packet["packet_md"]).exists()
@@ -48,7 +50,7 @@ def main() -> None:
     assert export["artifacts"] and export["runs"] and export["gates"]
     print(f"SMOKE_OK run={run_id} packet_md={packet['packet_md']} packet_json={packet['packet_json']} gates={len(gates['gates'])}")
     if os.environ.get("MOLT_GIC_KEEP_SMOKE") != "1":
-        for path in [ROOT / ".molt-gic", DB, ROOT / "smoke-export.json"]:
+        for path in [ROOT / ".molt-gic", DB, ROOT / "smoke-export.json", ROOT / "dashboard.json", ROOT / "dashboard.html"]:
             if path.is_dir():
                 shutil.rmtree(path)
             elif path.exists():
