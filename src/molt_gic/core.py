@@ -184,6 +184,15 @@ CREATE TABLE IF NOT EXISTS provider_runs (
   error_class TEXT,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS plugin_events (
+  id TEXT PRIMARY KEY,
+  mode TEXT NOT NULL CHECK(mode IN ('dry_run','live')),
+  gateway_route TEXT NOT NULL,
+  receipt_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('ok','error')),
+  detail_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS trace_metrics (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES runs(id),
@@ -723,7 +732,7 @@ def apply_revert(db: str, packet_id: str, reviewer: str, confirm: bool = False) 
 def export_db(db: str, out: str) -> None:
     with connect(db) as conn:
         data = {}
-        for table in ["artifacts", "artifact_versions", "eval_examples", "trace_sources", "runs", "scores", "provider_runs", "trace_metrics", "gic_signatures", "gates", "packets", "decisions", "waivers", "lineage"]:
+        for table in ["artifacts", "artifact_versions", "eval_examples", "trace_sources", "runs", "scores", "provider_runs", "plugin_events", "trace_metrics", "gic_signatures", "gates", "packets", "decisions", "waivers", "lineage"]:
             data[table] = [dict(r) for r in conn.execute(f"SELECT * FROM {table}")]
     write_text(out, json_dumps(data) + "\n")
 
@@ -867,3 +876,25 @@ def artifact_rules(typ: str) -> dict[str, Any]:
     }
     apply_policy = "confirm_apply" if typ == "skill" else "review_only"
     return {"artifact_type": typ, "enabled": True, "apply_policy": apply_policy, "mutation_masks": masks[typ]}
+
+
+def plugin_dry_run(db: str, route: str = "local") -> dict[str, Any]:
+    receipt_id = new_id("dry")
+    event = {"mode": "dry_run", "gateway_route": route, "receipt_id": receipt_id, "status": "ok", "would_call_cli": True, "live": False}
+    with connect(db) as conn:
+        conn.execute("INSERT INTO plugin_events(id,mode,gateway_route,receipt_id,status,detail_json,created_at) VALUES(?,?,?,?,?,?,?)",
+                     (new_id("plug"), "dry_run", route, receipt_id, "ok", json_dumps(event), now()))
+    return event
+
+
+def plugin_smoke(db: str, route: str = "local", confirm: bool = False, mutate_runtime_config: bool = False) -> dict[str, Any]:
+    if mutate_runtime_config:
+        raise PermissionError("runtime_config_mutation_blocked")
+    if not confirm:
+        raise PermissionError("confirm_required")
+    receipt_id = new_id("live")
+    event = {"mode": "live", "gateway_route": route, "receipt_id": receipt_id, "status": "ok", "live": True, "bounded": True}
+    with connect(db) as conn:
+        conn.execute("INSERT INTO plugin_events(id,mode,gateway_route,receipt_id,status,detail_json,created_at) VALUES(?,?,?,?,?,?,?)",
+                     (new_id("plug"), "live", route, receipt_id, "ok", json_dumps(event), now()))
+    return event

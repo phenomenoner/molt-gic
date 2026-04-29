@@ -38,6 +38,8 @@ def main() -> None:
     run("pilot", "verify", "--db", str(DB), "--artifact", "skill:humanizer-zh", "--json")
     run("security", "scan", "--path", "examples/humanizer-zh", "--json")
     run("adapter", "discover", "--root", "examples", "--json")
+    run("plugin", "dry-run", "--db", str(DB), "--route", "local", "--json")
+    run("plugin", "smoke", "--db", str(DB), "--route", "local", "--confirm", "--json")
     run("db", "export", "--db", str(DB), "--out", "smoke-export.json", "--json")
     assert gates["gates"]
     assert (ROOT / packet["packet_md"]).exists()

@@ -30,6 +30,8 @@ from .core import (
     json_dumps,
     propose_candidate,
     pilot_verify,
+    plugin_dry_run,
+    plugin_smoke,
     record_decision,
     replay_packet,
     resume_run,
@@ -222,6 +224,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--artifact", required=True)
     p.add_argument("--json", action="store_true")
 
+    plugin = sub.add_parser("plugin")
+    plugin_sub = plugin.add_subparsers(dest="action", required=True)
+    p = plugin_sub.add_parser("dry-run")
+    p.add_argument("--db", default=".molt-gic.sqlite")
+    p.add_argument("--route", default="local")
+    p.add_argument("--json", action="store_true")
+    p = plugin_sub.add_parser("smoke")
+    p.add_argument("--db", default=".molt-gic.sqlite")
+    p.add_argument("--route", default="local")
+    p.add_argument("--confirm", action="store_true")
+    p.add_argument("--mutate-runtime-config", action="store_true")
+    p.add_argument("--json", action="store_true")
+
     provider = sub.add_parser("provider")
     provider_sub = provider.add_subparsers(dest="action", required=True)
     p = provider_sub.add_parser("doctor")
@@ -318,6 +333,10 @@ def main(argv: list[str] | None = None) -> int:
             emit(provider_doctor(args.provider), args.json)
         elif args.cmd == "trace" and args.action == "mine" and args.mine_action == "import":
             emit(trace_mine_import(args.db, args.artifact, args.file), args.json)
+        elif args.cmd == "plugin" and args.action == "dry-run":
+            emit(plugin_dry_run(args.db, args.route), args.json)
+        elif args.cmd == "plugin" and args.action == "smoke":
+            emit(plugin_smoke(args.db, args.route, args.confirm, args.mutate_runtime_config), args.json)
         else:
             raise ValueError("unhandled command")
         return 0
