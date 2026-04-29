@@ -72,6 +72,7 @@ The public v1 plan is tracked in:
 - `docs/trace-mining.md`
 - `docs/artifact-types.md`
 - `docs/openclaw-plugin-gateway.md`
+- `docs/openclaw-install-guide.md`
 - `docs/dashboard.md`
 - `docs/release.md`
 - `docs/v1-pilot-report.md`

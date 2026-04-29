@@ -1,0 +1,12 @@
+{
+  "name": "molt-gic-openclaw-extension",
+  "version": "0.2.0",
+  "description": "OpenClaw gateway HTTP and RPC smoke surfaces for molt-gic receipts",
+  "type": "module",
+  "license": "MIT",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
