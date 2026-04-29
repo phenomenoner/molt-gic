@@ -34,6 +34,7 @@ from .core import (
     resume_run,
     scan_path_for_secrets,
 )
+from .provider import ProviderError, doctor as provider_doctor
 
 
 def emit(obj, as_json: bool = False) -> None:
@@ -102,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--mode", choices=["baseline", "candidate"], required=True)
     p.add_argument("--baseline", required=True)
     p.add_argument("--candidate")
+    p.add_argument("--provider", default="fixture")
+    p.add_argument("--judge-provider", default="fixture")
     p.add_argument("--review-only", action="store_true")
     p.add_argument("--json", action="store_true")
 
@@ -212,6 +215,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--artifact", required=True)
     p.add_argument("--json", action="store_true")
 
+    provider = sub.add_parser("provider")
+    provider_sub = provider.add_subparsers(dest="action", required=True)
+    p = provider_sub.add_parser("doctor")
+    p.add_argument("--provider", default="fixture")
+    p.add_argument("--json", action="store_true")
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "init":
@@ -234,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
                 conn.execute("UPDATE eval_examples SET source='golden', metadata_json=json_set(metadata_json,'$.promotion_reviewer',?,'$.promotion_reason',?) WHERE id=? AND source='trace_mined'", (args.reviewer, args.reason, args.example))
             emit({"status": "ok", "example_id": args.example}, args.json)
         elif args.cmd == "eval" and args.action == "run":
-            rid = evaluate_run(args.db, args.artifact, args.mode, args.baseline, args.candidate, args.review_only)
+            rid = evaluate_run(args.db, args.artifact, args.mode, args.baseline, args.candidate, args.review_only, args.provider, args.judge_provider)
             emit({"run_id": rid}, args.json)
         elif args.cmd == "run" and args.action == "list":
             with connect(args.db) as conn:
@@ -286,9 +295,14 @@ def main(argv: list[str] | None = None) -> int:
             result = pilot_verify(args.db, args.artifact)
             emit(result, args.json)
             return 0 if result["status"] == "pass" else EXIT_GATE
+        elif args.cmd == "provider" and args.action == "doctor":
+            emit(provider_doctor(args.provider), args.json)
         else:
             raise ValueError("unhandled command")
         return 0
+    except ProviderError as exc:
+        print(f"molt-gic: provider error [{exc.error_class}]: {exc}", file=sys.stderr)
+        return EXIT_MODEL if exc.error_class in {"timeout", "auth"} else EXIT_CONFIG
     except PermissionError as exc:
         print(f"molt-gic: safety error: {exc}", file=sys.stderr)
         return EXIT_SAFETY

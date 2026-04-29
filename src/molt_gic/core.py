@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from .provider import ProviderError, get_provider
+
 AXES = ["foundation", "context", "planning", "tools", "action", "closure"]
 AXIS_WEIGHTS = {"foundation": 1.1, "context": 1.0, "planning": 1.1, "tools": 1.0, "action": 1.4, "closure": 1.0}
 RISK_WEIGHTS = {"low": 1.0, "medium": 1.3, "high": 1.8}
@@ -158,6 +160,20 @@ CREATE TABLE IF NOT EXISTS scores (
   rubric_hash TEXT NOT NULL,
   findings_json TEXT NOT NULL DEFAULT '[]'
 );
+CREATE TABLE IF NOT EXISTS provider_runs (
+  id TEXT PRIMARY KEY,
+  run_id TEXT REFERENCES runs(id),
+  provider TEXT NOT NULL,
+  role TEXT NOT NULL,
+  model TEXT NOT NULL,
+  model_version TEXT NOT NULL,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  cost_usd REAL NOT NULL DEFAULT 0,
+  retries INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK(status IN ('ok','error')),
+  error_class TEXT,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS trace_metrics (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES runs(id),
@@ -232,6 +248,7 @@ CREATE TABLE IF NOT EXISTS lineage (
 CREATE INDEX IF NOT EXISTS idx_examples_artifact ON eval_examples(artifact_id);
 CREATE INDEX IF NOT EXISTS idx_runs_artifact ON runs(artifact_id);
 CREATE INDEX IF NOT EXISTS idx_scores_run ON scores(run_id);
+CREATE INDEX IF NOT EXISTS idx_provider_runs_run ON provider_runs(run_id);
 CREATE INDEX IF NOT EXISTS idx_gates_run ON gates(run_id);
 """
 
@@ -441,7 +458,7 @@ def idempotency_key(artifact_id: str, baseline_hash: str, candidate_hash: str | 
     return sha256_text(json_dumps([artifact_id, baseline_hash, candidate_hash, d_hash, c_hash, code_sha, mode, seed]))
 
 
-def evaluate_run(db: str, artifact_id: str, mode: str, baseline_path: str, candidate_path: str | None = None, review_only: bool = False) -> str:
+def evaluate_run(db: str, artifact_id: str, mode: str, baseline_path: str, candidate_path: str | None = None, review_only: bool = False, provider_id: str = "fixture", judge_provider_id: str = "fixture") -> str:
     start = time.time()
     if mode not in {"baseline", "candidate"}:
         raise ValueError("mode must be baseline or candidate")
@@ -482,9 +499,17 @@ def evaluate_run(db: str, artifact_id: str, mode: str, baseline_path: str, candi
             return existing["id"]
         run_id = new_id("run")
         status = "running"
+        runner_provider = get_provider(provider_id)
+        judge_provider = get_provider(judge_provider_id)
+        runner_output, runner_receipt = runner_provider.run("runner", baseline_text if mode == "baseline" else (candidate_text or baseline_text))
+        judge_output, judge_receipt = judge_provider.run("primary_judge", runner_output)
+        opposite_output, opposite_receipt = judge_provider.run("opposite_critic", runner_output)
         conn.execute("""INSERT INTO runs(id,artifact_id,mode,status,baseline_version_id,candidate_version_id,generator_model,runner_model,runner_model_version,primary_judge_model,opposite_critic_model,judge_model_version,dataset_hash,config_hash,code_sha,idempotency_key,baseline_score,candidate_score,created_at)
                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                     (run_id, artifact_id, mode, status, baseline_version["id"], candidate_version_id, "template-mask", "template-runner", "v0", "deterministic-judge", "opposite-critic-v0", "v0", d_hash, c_hash, code_sha, idem, b_score, c_score, now()))
+                     (run_id, artifact_id, mode, status, baseline_version["id"], candidate_version_id, "template-mask", runner_receipt.model, runner_receipt.model_version, judge_receipt.model, opposite_receipt.model, judge_receipt.model_version, d_hash, c_hash, code_sha, idem, b_score, c_score, now()))
+        for receipt in [runner_receipt, judge_receipt, opposite_receipt]:
+            conn.execute("INSERT INTO provider_runs(id,run_id,provider,role,model,model_version,latency_ms,cost_usd,retries,status,error_class,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (new_id("prov"), run_id, receipt.provider, receipt.role, receipt.model, receipt.model_version, receipt.latency_ms, receipt.cost_usd, receipt.retries, receipt.status, receipt.error_class, now()))
         active_rows = c_rows if mode == "candidate" else b_rows
         for ex, axes in active_rows:
             score = weighted_example_score(axes)
@@ -686,7 +711,7 @@ def apply_revert(db: str, packet_id: str, reviewer: str, confirm: bool = False) 
 def export_db(db: str, out: str) -> None:
     with connect(db) as conn:
         data = {}
-        for table in ["artifacts", "artifact_versions", "eval_examples", "runs", "scores", "trace_metrics", "gic_signatures", "gates", "packets", "decisions", "waivers", "lineage"]:
+        for table in ["artifacts", "artifact_versions", "eval_examples", "runs", "scores", "provider_runs", "trace_metrics", "gic_signatures", "gates", "packets", "decisions", "waivers", "lineage"]:
             data[table] = [dict(r) for r in conn.execute(f"SELECT * FROM {table}")]
     write_text(out, json_dumps(data) + "\n")
 

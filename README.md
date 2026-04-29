@@ -67,4 +67,5 @@ The public v1 plan is tracked in:
 - `docs/v1-roadmap.md`
 - `docs/v1-packets.md`
 - `docs/v1-verifier-plan.md`
+- `docs/provider-adapters.md`
 

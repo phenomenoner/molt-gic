@@ -25,6 +25,7 @@ def main() -> None:
         elif path.exists():
             path.unlink()
     run("init", "--db", str(DB), "--json")
+    run("provider", "doctor", "--provider", "fixture", "--json")
     run("artifact", "add", "--db", str(DB), "--type", "skill", "--path", "examples/humanizer-zh/SKILL.md", "--name", "humanizer-zh", "--json")
     run("dataset", "import", "--db", str(DB), "--artifact", "skill:humanizer-zh", "--source", "golden", "--file", "examples/humanizer-zh/golden.jsonl", "--json")
     run("eval", "run", "--db", str(DB), "--artifact", "skill:humanizer-zh", "--mode", "baseline", "--baseline", "examples/humanizer-zh/SKILL.md", "--json")

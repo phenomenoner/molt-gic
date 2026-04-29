@@ -47,6 +47,11 @@ def test_p8_p10_p12_p14_surfaces(tmp_path: Path):
     assert proc.returncode == 7
     replay = json.loads(cli(tmp_path, "replay", "packet", "--db", str(db), "--packet", packet_id, "--json").stdout)
     assert replay["status"] == "ok" and Path(tmp_path / replay["receipt"]).exists()
+    export_path = tmp_path / "export.json"
+    cli(tmp_path, "db", "export", "--db", str(db), "--out", str(export_path), "--json")
+    exported = json.loads(export_path.read_text())
+    assert exported["provider_runs"]
+    assert {row["role"] for row in exported["provider_runs"]} >= {"runner", "primary_judge", "opposite_critic"}
     pilot = json.loads(cli(tmp_path, "pilot", "verify", "--db", str(db), "--artifact", "skill:skill", "--json").stdout)
     assert pilot["status"] == "pass"
 
