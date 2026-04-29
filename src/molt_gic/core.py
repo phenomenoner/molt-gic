@@ -689,3 +689,82 @@ def export_db(db: str, out: str) -> None:
         for table in ["artifacts", "artifact_versions", "eval_examples", "runs", "scores", "trace_metrics", "gic_signatures", "gates", "packets", "decisions", "waivers", "lineage"]:
             data[table] = [dict(r) for r in conn.execute(f"SELECT * FROM {table}")]
     write_text(out, json_dumps(data) + "\n")
+
+
+def scan_path_for_secrets(path: str | Path) -> dict[str, Any]:
+    p = Path(path)
+    files: list[Path]
+    if p.is_dir():
+        files = [x for x in p.rglob("*") if x.is_file() and ".git" not in x.parts]
+    else:
+        files = [p]
+    findings: list[dict[str, Any]] = []
+    for f in files:
+        try:
+            text = f.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for pattern in secret_findings(text):
+            findings.append({"path": str(f), "detector_hash": sha256_text(pattern), "detector_class": "secret_like"})
+    return {"status": "fail" if findings else "pass", "findings": findings}
+
+
+def adapter_discover(root: str | Path = ".") -> dict[str, Any]:
+    rootp = Path(root).resolve()
+    skills = []
+    for path in rootp.rglob("SKILL.md"):
+        if ".git" in path.parts or ".venv" in path.parts:
+            continue
+        skills.append({"path": str(path), "artifact_id": f"skill:{path.parent.name}"})
+    return {"status": "ok", "root": str(rootp), "skills": skills}
+
+
+def replay_packet(db: str, packet_id: str, out_dir: str = ".molt-gic/replay") -> dict[str, Any]:
+    with connect(db) as conn:
+        packet = fetch_one(conn, "SELECT * FROM packets WHERE id=?", (packet_id,))
+        if not packet:
+            raise ValueError("packet not found")
+        run = fetch_one(conn, "SELECT * FROM runs WHERE id=?", (packet["run_id"],))
+        gates = [dict(r) for r in conn.execute("SELECT name,status,detail_json,non_waivable FROM gates WHERE run_id=? ORDER BY name", (run["id"],))]
+        outp = Path(out_dir)
+        outp.mkdir(parents=True, exist_ok=True)
+        receipt = {
+            "packet_id": packet_id,
+            "run_id": run["id"],
+            "runner_model": run["runner_model"],
+            "runner_model_version": run["runner_model_version"],
+            "judge_model_version": run["judge_model_version"],
+            "gate_count": len(gates),
+            "replay_determinism": "best_effort",
+        }
+        receipt_path = outp / f"{packet_id}-replay.json"
+        write_text(receipt_path, json_dumps(receipt) + "\n")
+        return {"status": "ok", "receipt": str(receipt_path), **receipt}
+
+
+def cancel_run(db: str, run_id: str) -> None:
+    with connect(db) as conn:
+        row = fetch_one(conn, "SELECT status FROM runs WHERE id=?", (run_id,))
+        if not row:
+            raise ValueError("run not found")
+        if row["status"] in {"passed", "failed"}:
+            raise ValueError("completed run cannot be cancelled")
+        conn.execute("UPDATE runs SET status='cancelled', completed_at=? WHERE id=?", (now(), run_id))
+
+
+def resume_run(db: str, run_id: str) -> dict[str, Any]:
+    with connect(db) as conn:
+        row = fetch_one(conn, "SELECT * FROM runs WHERE id=?", (run_id,))
+        if not row:
+            raise ValueError("run not found")
+        return {"status": row["status"], "resumable": row["status"] in {"created", "running", "cancelled"}, "run_id": run_id}
+
+
+def pilot_verify(db: str, artifact_id: str) -> dict[str, Any]:
+    with connect(db) as conn:
+        require_artifact(conn, artifact_id)
+        golden = fetch_one(conn, "SELECT COUNT(*) AS n FROM eval_examples WHERE artifact_id=? AND source='golden'", (artifact_id,))["n"]
+        latest = fetch_one(conn, "SELECT * FROM runs WHERE artifact_id=? ORDER BY created_at DESC LIMIT 1", (artifact_id,))
+        gates = [] if not latest else [dict(r) for r in conn.execute("SELECT name,status,non_waivable FROM gates WHERE run_id=?", (latest["id"],))]
+        ok = golden >= 10 and latest is not None and not any(g["status"] == "fail" and g["non_waivable"] for g in gates)
+        return {"status": "pass" if ok else "fail", "golden_count": golden, "latest_run": latest["id"] if latest else None, "gates": gates}

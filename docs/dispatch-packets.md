@@ -29,3 +29,18 @@ P1-P14 are required for v0.
 ## v0 critical path
 
 P9a should be validated before final P5/P6 closure because trace metrics are core to the GIC gate. P9b consumes the P6 candidate and owns GIC gate enforcement.
+
+## Public closure commands
+
+The public v0 implementation exposes a verifier surface for every packet family:
+
+```bash
+uv run --with pytest pytest -q
+python3 tools/smoke.py
+molt-gic security scan --path examples/humanizer-zh --json
+molt-gic adapter discover --root examples --json
+molt-gic replay packet --packet PACKET_ID --json
+molt-gic pilot verify --artifact skill:humanizer-zh --json
+```
+
+The smoke script exercises P1-P14 in one local flow: init, artifact registration, dataset import, baseline/candidate eval, GIC gates, packet generation, replay receipt, pilot gate, security scan, adapter discovery, and export.

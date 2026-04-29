@@ -18,7 +18,9 @@ from .core import (
     add_artifact,
     apply_local,
     apply_revert,
+    adapter_discover,
     build_packet,
+    cancel_run,
     connect,
     evaluate_run,
     export_db,
@@ -26,7 +28,11 @@ from .core import (
     init_db,
     json_dumps,
     propose_candidate,
+    pilot_verify,
     record_decision,
+    replay_packet,
+    resume_run,
+    scan_path_for_secrets,
 )
 
 
@@ -105,6 +111,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--db", default=".molt-gic.sqlite")
     p.add_argument("--artifact")
     p.add_argument("--json", action="store_true")
+    p = run_sub.add_parser("cancel")
+    p.add_argument("--db", default=".molt-gic.sqlite")
+    p.add_argument("--run", required=True)
+    p.add_argument("--json", action="store_true")
+    p = run_sub.add_parser("resume")
+    p.add_argument("--db", default=".molt-gic.sqlite")
+    p.add_argument("--run", required=True)
+    p.add_argument("--json", action="store_true")
 
     evo = sub.add_parser("evolve")
     evo_sub = evo.add_subparsers(dest="action", required=True)
@@ -171,6 +185,33 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", required=True)
     p.add_argument("--json", action="store_true")
 
+    sec = sub.add_parser("security")
+    sec_sub = sec.add_subparsers(dest="action", required=True)
+    p = sec_sub.add_parser("scan")
+    p.add_argument("--path", required=True)
+    p.add_argument("--json", action="store_true")
+
+    adapter = sub.add_parser("adapter")
+    adapter_sub = adapter.add_subparsers(dest="action", required=True)
+    p = adapter_sub.add_parser("discover")
+    p.add_argument("--root", default=".")
+    p.add_argument("--json", action="store_true")
+
+    replay = sub.add_parser("replay")
+    replay_sub = replay.add_subparsers(dest="action", required=True)
+    p = replay_sub.add_parser("packet")
+    p.add_argument("--db", default=".molt-gic.sqlite")
+    p.add_argument("--packet", required=True)
+    p.add_argument("--out-dir", default=".molt-gic/replay")
+    p.add_argument("--json", action="store_true")
+
+    pilot = sub.add_parser("pilot")
+    pilot_sub = pilot.add_subparsers(dest="action", required=True)
+    p = pilot_sub.add_parser("verify")
+    p.add_argument("--db", default=".molt-gic.sqlite")
+    p.add_argument("--artifact", required=True)
+    p.add_argument("--json", action="store_true")
+
     args = parser.parse_args(argv)
     try:
         if args.cmd == "init":
@@ -202,6 +243,11 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     rows = [dict(r) for r in conn.execute("SELECT id,artifact_id,mode,status,recommendation_status,run_score,created_at FROM runs ORDER BY created_at")]
             emit({"runs": rows}, args.json)
+        elif args.cmd == "run" and args.action == "cancel":
+            cancel_run(args.db, args.run)
+            emit({"status": "cancelled", "run_id": args.run}, args.json)
+        elif args.cmd == "run" and args.action == "resume":
+            emit(resume_run(args.db, args.run), args.json)
         elif args.cmd == "evolve" and args.action == "propose":
             path = propose_candidate(args.db, args.artifact, args.strategy, args.output, args.review_only)
             emit({"candidate_path": path}, args.json)
@@ -228,6 +274,18 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "db" and args.action == "export":
             export_db(args.db, args.out)
             emit({"status": "ok", "out": args.out}, args.json)
+        elif args.cmd == "security" and args.action == "scan":
+            result = scan_path_for_secrets(args.path)
+            emit(result, args.json)
+            return 0 if result["status"] == "pass" else EXIT_SAFETY
+        elif args.cmd == "adapter" and args.action == "discover":
+            emit(adapter_discover(args.root), args.json)
+        elif args.cmd == "replay" and args.action == "packet":
+            emit(replay_packet(args.db, args.packet, args.out_dir), args.json)
+        elif args.cmd == "pilot" and args.action == "verify":
+            result = pilot_verify(args.db, args.artifact)
+            emit(result, args.json)
+            return 0 if result["status"] == "pass" else EXIT_GATE
         else:
             raise ValueError("unhandled command")
         return 0

@@ -20,6 +20,10 @@ molt-gic apply revert --packet PACKET_ID --reviewer NAME --confirm [--json]
 molt-gic lineage show --artifact ID [--json]
 molt-gic gate explain --run RUN_ID [--json]
 molt-gic db export --out PATH [--json]
+molt-gic security scan --path PATH [--json]
+molt-gic adapter discover [--root PATH] [--json]
+molt-gic replay packet --packet PACKET_ID [--out-dir DIR] [--json]
+molt-gic pilot verify --artifact ID [--json]
 ```
 
 `--review-only` restricts side effects to ledger and packet artifacts. It never applies local file changes.

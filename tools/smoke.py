@@ -32,6 +32,11 @@ def main() -> None:
     run_id = run("eval", "run", "--db", str(DB), "--artifact", "skill:humanizer-zh", "--mode", "candidate", "--baseline", "examples/humanizer-zh/SKILL.md", "--candidate", cand, "--json")["run_id"]
     gates = run("gate", "explain", "--db", str(DB), "--run", run_id, "--json")
     packet = run("packet", "build", "--db", str(DB), "--run", run_id, "--json")
+    packet_id = Path(packet["packet_json"]).stem
+    run("replay", "packet", "--db", str(DB), "--packet", packet_id, "--json")
+    run("pilot", "verify", "--db", str(DB), "--artifact", "skill:humanizer-zh", "--json")
+    run("security", "scan", "--path", "examples/humanizer-zh", "--json")
+    run("adapter", "discover", "--root", "examples", "--json")
     run("db", "export", "--db", str(DB), "--out", "smoke-export.json", "--json")
     assert gates["gates"]
     assert (ROOT / packet["packet_md"]).exists()
