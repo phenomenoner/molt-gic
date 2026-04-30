@@ -32,6 +32,9 @@ If a packet is built, the helper prints a human-readable notice by default:
 MOLT-GIC REVIEW REQUIRED
 status=packet_built
 recommendation=recommend
+lyria_suggests=reject|approve|revise
+summary=...
+rationale=...
 run_id=run_...
 packet_md=...
 packet_json=...
@@ -45,6 +48,15 @@ molt-gic decision record ... --decision promote ...
 Apply after promote only:
 molt-gic apply local ... --confirm --json
 ```
+
+The `lyria_suggests` line is a deterministic executive pre-review from the helper. It is not a recorded decision. It exists so the operator sees a concise marshal recommendation before deciding.
+
+Current built-in recommendation rules are conservative:
+
+- `reject` if any non-waivable gate failed
+- `reject` if the candidate only appends generic smoke/test notes
+- `revise` if waivable gates failed or the packet recommendation is not clearly `recommend`
+- `approve` only if gates pass and the candidate does not look like a generic smoke-only patch
 
 With `--format json`, the helper prints JSON containing:
 

@@ -120,12 +120,58 @@ def test_render_human_review_notice_is_operator_readable():
         ".molt-gic.sqlite",
         "human",
     )
+    enriched["executive_review"] = {
+        "suggested_decision": "reject",
+        "summary": "skill:molt-gic-autopacket packet packet_abc: 6/6 gates pass; recommendation=recommend.",
+        "rationale": "candidate appears to add only generic molt-gic notes; low product value",
+    }
 
     notice = mod.render_human_review_notice(enriched)
     assert notice.startswith("MOLT-GIC REVIEW REQUIRED")
+    assert "lyria_suggests=reject" in notice
+    assert "summary=" in notice
+    assert "rationale=" in notice
     assert "packet_md=/tmp/packet_abc.md" in notice
     assert "Review first. Cron/job must not apply." in notice
     assert "Reject:" in notice
     assert "Promote decision:" in notice
     assert "Apply after promote only:" in notice
     assert "--confirm" in notice
+
+
+def test_build_executive_review_rejects_generic_smoke_candidate(tmp_path, monkeypatch):
+    artifact = tmp_path / "examples/molt-gic-autopacket/SKILL.md"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("# skill\n", encoding="utf-8")
+    candidate = tmp_path / ".molt-gic/candidates/candidate.md"
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text(
+        "# skill\n\n## molt-gic candidate notes\n\n"
+        "- Preserve scope and authority boundaries.\n"
+        "- Add a verifier pass before final output.\n"
+        "- Keep non-changing sections byte-identical where possible.\n",
+        encoding="utf-8",
+    )
+    packet = tmp_path / ".molt-gic/packets/packet_test.json"
+    packet.parent.mkdir(parents=True)
+    packet.write_text(
+        '{"packet_id":"packet_test","artifact_id":"skill:molt-gic-autopacket","recommendation_status":"recommend",'
+        '"gates":[{"name":"artifact_scope","status":"pass","non_waivable":1}],'
+        '"rollback":{"restore_path":"examples/molt-gic-autopacket/SKILL.md"}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(mod, "REPO_ROOT", tmp_path)
+
+    review = mod.build_executive_review(
+        {
+            "status": "packet_built",
+            "artifact_id": "skill:molt-gic-autopacket",
+            "candidate_path": ".molt-gic/candidates/candidate.md",
+            "packet_json": str(packet),
+            "recommendation_status": "recommend",
+        }
+    )
+
+    assert review["suggested_decision"] == "reject"
+    assert review["generic_smoke_candidate"] is True
+    assert "low product value" in review["rationale"]
