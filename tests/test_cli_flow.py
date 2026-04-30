@@ -88,3 +88,77 @@ def test_apply_requires_confirm_and_rejects_symlink(tmp_path: Path):
     proc = run_cli(tmp_path, "artifact", "add", "--db", str(db), "--type", "skill", "--path", str(link), "--name", "bad", check=False)
     # Existing symlink resolves during registration, but apply safety is covered by canonical path policy in core.
     assert proc.returncode in (0, 7)
+
+
+def test_promoted_skill_apply_and_revert_emit_receipts(tmp_path: Path):
+    skill, data = write_fixture(tmp_path)
+    db = tmp_path / "molt.sqlite"
+    run_cli(tmp_path, "init", "--db", str(db), "--json")
+    add = run_cli(tmp_path, "artifact", "add", "--db", str(db), "--type", "skill", "--path", str(skill), "--name", "humanizer-zh", "--json")
+    artifact_id = json.loads(add.stdout)["artifact_id"]
+    run_cli(tmp_path, "dataset", "import", "--db", str(db), "--artifact", artifact_id, "--source", "golden", "--file", str(data), "--json")
+    proposed = run_cli(tmp_path, "evolve", "propose", "--db", str(db), "--artifact", artifact_id, "--json")
+    candidate = json.loads(proposed.stdout)["candidate_path"]
+    cand_run = run_cli(tmp_path, "eval", "run", "--db", str(db), "--artifact", artifact_id, "--mode", "candidate", "--baseline", str(skill), "--candidate", candidate, "--json")
+    run_id = json.loads(cand_run.stdout)["run_id"]
+    packet = run_cli(tmp_path, "packet", "build", "--db", str(db), "--run", run_id, "--json")
+    packet_json = json.loads(packet.stdout)
+    packet_id = json.loads(Path(tmp_path / packet_json["packet_json"]).read_text())["packet_id"]
+
+    no_confirm = run_cli(tmp_path, "apply", "local", "--db", str(db), "--packet", packet_id, "--reviewer", "qa", "--json", check=False)
+    assert no_confirm.returncode == 7
+    no_promote = run_cli(tmp_path, "apply", "local", "--db", str(db), "--packet", packet_id, "--reviewer", "qa", "--confirm", "--json", check=False)
+    assert no_promote.returncode == 7
+    assert "promote_decision_required" in no_promote.stderr
+
+    run_cli(tmp_path, "decision", "record", "--db", str(db), "--packet", packet_id, "--decision", "promote", "--reviewer", "qa", "--rationale", "fixture gates pass", "--json")
+    applied = json.loads(run_cli(tmp_path, "apply", "local", "--db", str(db), "--packet", packet_id, "--reviewer", "qa", "--confirm", "--json").stdout)
+    assert applied["status"] == "applied"
+    assert applied["packet_id"] == packet_id
+    assert applied["runtime_config_mutation"] == "blocked"
+    assert "content_hash" in applied
+    assert not Path(applied["artifact_path"]).is_absolute()
+    assert "molt-gic candidate notes" in skill.read_text(encoding="utf-8")
+
+    reverted = json.loads(run_cli(tmp_path, "apply", "revert", "--db", str(db), "--packet", packet_id, "--reviewer", "qa", "--confirm", "--json").stdout)
+    assert reverted["status"] == "reverted"
+    assert reverted["packet_id"] == packet_id
+    assert "content_hash" in reverted
+    assert not Path(reverted["artifact_path"]).is_absolute()
+    assert "molt-gic candidate notes" not in skill.read_text(encoding="utf-8")
+
+    export = tmp_path / "export.json"
+    run_cli(tmp_path, "db", "export", "--db", str(db), "--out", str(export), "--json")
+    data = json.loads(export.read_text())
+    assert [r["action"] for r in data["apply_receipts"]] == ["apply_local", "revert_local"]
+    assert all(not Path(r["artifact_path"]).is_absolute() for r in data["apply_receipts"])
+
+
+def test_review_only_artifact_apply_is_blocked_after_promote(tmp_path: Path):
+    route = tmp_path / "ROUTE.md"
+    route.write_text("# route\n\nKeep routing bounded.\n", encoding="utf-8")
+    rows = []
+    for i in range(10):
+        rows.append({
+            "id": f"ex_{i}",
+            "input": f"route case {i}",
+            "expected_behavior": "preserve routing boundaries",
+            "axis_tags": ["foundation", "action", "closure"],
+            "risk": "low",
+            "source": "golden",
+        })
+    golden = tmp_path / "golden.jsonl"
+    golden.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    db = tmp_path / "molt.sqlite"
+    run_cli(tmp_path, "init", "--db", str(db), "--json")
+    add = run_cli(tmp_path, "artifact", "add", "--db", str(db), "--type", "route", "--path", str(route), "--name", "triage", "--json")
+    artifact_id = json.loads(add.stdout)["artifact_id"]
+    run_cli(tmp_path, "dataset", "import", "--db", str(db), "--artifact", artifact_id, "--source", "golden", "--file", str(golden), "--json")
+    candidate = json.loads(run_cli(tmp_path, "evolve", "propose", "--db", str(db), "--artifact", artifact_id, "--json").stdout)["candidate_path"]
+    run_id = json.loads(run_cli(tmp_path, "eval", "run", "--db", str(db), "--artifact", artifact_id, "--mode", "candidate", "--baseline", str(route), "--candidate", candidate, "--json").stdout)["run_id"]
+    packet_paths = json.loads(run_cli(tmp_path, "packet", "build", "--db", str(db), "--run", run_id, "--json").stdout)
+    packet_id = json.loads(Path(tmp_path / packet_paths["packet_json"]).read_text())["packet_id"]
+    run_cli(tmp_path, "decision", "record", "--db", str(db), "--packet", packet_id, "--decision", "promote", "--reviewer", "qa", "--rationale", "review-only type", "--json")
+    blocked = run_cli(tmp_path, "apply", "local", "--db", str(db), "--packet", packet_id, "--reviewer", "qa", "--confirm", "--json", check=False)
+    assert blocked.returncode == 7
+    assert "artifact_type_review_only" in blocked.stderr

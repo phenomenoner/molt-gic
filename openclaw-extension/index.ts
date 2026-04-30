@@ -107,7 +107,7 @@ function updateDigest(digestPath: string, receipt: Record<string, unknown>, acti
     evaluation: `latest receipt status=${String(receipt.status ?? "unknown")}, schema=${String(receipt.schema ?? "unknown")}`,
     suggested_evolution: "if this receipt is expected, propose the next smallest review-only packet; otherwise investigate before apply",
     next_safe_action: "/molt-gic evolve --review-only",
-    apply_policy: "apply is enabled but bounded; no runtime config mutation; use explicit command/action receipt",
+    apply_policy: "direct OpenClaw apply is blocked; use packet-backed CLI apply with confirm; runtime config mutation remains blocked",
     receipts,
   };
   writeDigest(digestPath, digest);
@@ -141,13 +141,14 @@ function buildEvolveReceipt(routePath: string, params: Record<string, unknown> |
 
 function buildApplyReceipt(routePath: string, params: Record<string, unknown> | undefined) {
   return {
-    status: "ok",
+    status: "blocked",
     schema: "molt-gic.apply.receipt.v1",
     route: routePath,
-    mode: "bounded_apply_surface_enabled",
+    mode: "packet_backed_apply_required",
     receipt_id: typeof params?.receipt_id === "string" ? params.receipt_id : `apply_${Date.now().toString(36)}`,
     applied: false,
-    reason: "live OpenClaw command/RPC apply surface is enabled but defaults to receipt-only until packet-backed write adapter is wired",
+    reason: "packet_backed_adapter_required",
+    next_safe_action: "run molt-gic apply local --packet <id> --reviewer <name> --confirm, then smoke and revert if needed",
     runtime_config_mutation: "blocked",
     ts: new Date().toISOString(),
   };

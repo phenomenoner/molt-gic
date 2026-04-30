@@ -35,3 +35,7 @@ molt-gic dashboard render --snapshot dashboard.json --out dashboard.html [--json
 ```
 
 `--review-only` restricts side effects to ledger and packet artifacts. It never applies local file changes.
+
+`apply local` requires both a recorded `promote` decision and `--confirm`. It writes only the registered artifact file, verifies hash readback, records an `apply_receipts` row, and reports `runtime_config_mutation: blocked`. `apply revert` restores the baseline version with the same confirmation and receipt rules.
+
+Public packet/export paths are normalized to relative or basename references so review artifacts do not expose local absolute paths.

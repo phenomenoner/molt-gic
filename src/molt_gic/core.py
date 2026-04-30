@@ -195,6 +195,19 @@ CREATE TABLE IF NOT EXISTS plugin_events (
   detail_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS apply_receipts (
+  id TEXT PRIMARY KEY,
+  packet_id TEXT NOT NULL REFERENCES packets(id),
+  action TEXT NOT NULL CHECK(action IN ('apply_local','revert_local')),
+  reviewer TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('ok','error')),
+  artifact_id TEXT NOT NULL,
+  artifact_path TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  runtime_config_mutation TEXT NOT NULL DEFAULT 'blocked',
+  detail_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS trace_metrics (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES runs(id),
@@ -292,6 +305,22 @@ def require_artifact(conn: sqlite3.Connection, artifact_id: str) -> sqlite3.Row:
     if not row:
         raise ValueError(f"artifact not found: {artifact_id}")
     return row
+
+
+def ensure_apply_receipts_table(conn: sqlite3.Connection) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS apply_receipts (
+      id TEXT PRIMARY KEY,
+      packet_id TEXT NOT NULL REFERENCES packets(id),
+      action TEXT NOT NULL CHECK(action IN ('apply_local','revert_local')),
+      reviewer TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('ok','error')),
+      artifact_id TEXT NOT NULL,
+      artifact_path TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      runtime_config_mutation TEXT NOT NULL DEFAULT 'blocked',
+      detail_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    )""")
 
 
 def canonicalize_registered_path(path: str | Path) -> Path:
@@ -635,11 +664,12 @@ def build_packet(db: str, run_id: str, out_dir: str = ".molt-gic/packets") -> tu
             "decision_rationale": "",
             "gic": dict(sig) if sig else {},
             "gates": gates,
-            "rollback": {"restore_path": artifact["path"], "restore_hash": artifact["current_hash"]},
+            "rollback": {"restore_path": public_path_ref(artifact["path"]), "restore_hash": artifact["current_hash"]},
             "reproducibility": {"dataset_hash": row["dataset_hash"], "config_hash": row["config_hash"], "code_sha": row["code_sha"], "runner_model": row["runner_model"], "runner_model_version": row["runner_model_version"], "judge_model_version": row["judge_model_version"], "replay_determinism": "best_effort"},
         }
         write_text(packet_json_path, json_dumps(payload) + "\n")
-        md = f"# molt-gic review packet {packet_id}\n\nRun: `{row['id']}`\n\nArtifact: `{artifact['id']}`\n\nRecommendation: **{row['recommendation_status']}**\n\n## Gates\n" + "\n".join(f"- {g['name']}: {g['status']}" for g in gates) + f"\n\n## Rollback\n\nRestore `{artifact['path']}` to hash `{artifact['current_hash']}`.\n"
+        rollback_ref = public_path_ref(artifact["path"])
+        md = f"# molt-gic review packet {packet_id}\n\nRun: `{row['id']}`\n\nArtifact: `{artifact['id']}`\n\nRecommendation: **{row['recommendation_status']}**\n\n## Gates\n" + "\n".join(f"- {g['name']}: {g['status']}" for g in gates) + f"\n\n## Rollback\n\nRestore `{rollback_ref}` to hash `{artifact['current_hash']}`.\n"
         write_text(packet_md_path, md)
         conn.execute("INSERT INTO packets(id,run_id,packet_json_path,packet_md_path,recommendation_status,rollback_hash,created_at) VALUES(?,?,?,?,?,?,?)",
                      (packet_id, row["id"], str(packet_json_path), str(packet_md_path), row["recommendation_status"], artifact["current_hash"], now()))
@@ -650,6 +680,7 @@ def record_decision(db: str, packet_id: str, decision: str, reviewer: str, ratio
     if decision not in {"promote", "revise", "reject"}:
         raise ValueError("invalid decision")
     with connect(db) as conn:
+        ensure_apply_receipts_table(conn)
         packet = fetch_one(conn, "SELECT * FROM packets WHERE id=?", (packet_id,))
         if not packet:
             raise ValueError("packet not found")
@@ -661,6 +692,19 @@ def record_decision(db: str, packet_id: str, decision: str, reviewer: str, ratio
             if run and run["candidate_version_id"]:
                 conn.execute("UPDATE artifact_versions SET state='human_approved' WHERE id=?", (run["candidate_version_id"],))
         return decision_id
+
+
+def public_path_ref(path_value: str) -> str:
+    p = Path(path_value).expanduser()
+    try:
+        resolved = p.resolve(strict=False)
+    except OSError:
+        resolved = p
+    cwd = Path.cwd().resolve(strict=True)
+    try:
+        return str(resolved.relative_to(cwd))
+    except ValueError:
+        return p.name
 
 
 def safe_registered_write_path(artifact_path: str) -> Path:
@@ -679,10 +723,11 @@ def safe_registered_write_path(artifact_path: str) -> Path:
     return target
 
 
-def apply_local(db: str, packet_id: str, reviewer: str, confirm: bool = False) -> str:
+def apply_local(db: str, packet_id: str, reviewer: str, confirm: bool = False) -> dict[str, str]:
     if not confirm:
         raise PermissionError("confirm_required")
     with connect(db) as conn:
+        ensure_apply_receipts_table(conn)
         packet = fetch_one(conn, "SELECT * FROM packets WHERE id=?", (packet_id,))
         if not packet:
             raise ValueError("packet not found")
@@ -704,13 +749,28 @@ def apply_local(db: str, packet_id: str, reviewer: str, confirm: bool = False) -
             raise PermissionError("readback_hash_mismatch")
         conn.execute("UPDATE artifact_versions SET state='adopted' WHERE id=?", (cand["id"],))
         conn.execute("UPDATE artifacts SET current_hash=? WHERE id=?", (readback, artifact["id"]))
-        return readback
+        receipt_id = new_id("apply")
+        receipt = {
+            "status": "applied",
+            "receipt_id": receipt_id,
+            "packet_id": packet_id,
+            "reviewer": reviewer,
+            "artifact_id": artifact["id"],
+            "artifact_path": public_path_ref(artifact["path"]),
+            "content_hash": readback,
+            "runtime_config_mutation": "blocked",
+        }
+        conn.execute("""INSERT INTO apply_receipts(id,packet_id,action,reviewer,status,artifact_id,artifact_path,content_hash,runtime_config_mutation,detail_json,created_at)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                     (receipt_id, packet_id, "apply_local", reviewer, "ok", artifact["id"], public_path_ref(artifact["path"]), readback, "blocked", json_dumps(receipt), now()))
+        return receipt
 
 
-def apply_revert(db: str, packet_id: str, reviewer: str, confirm: bool = False) -> str:
+def apply_revert(db: str, packet_id: str, reviewer: str, confirm: bool = False) -> dict[str, str]:
     if not confirm:
         raise PermissionError("confirm_required")
     with connect(db) as conn:
+        ensure_apply_receipts_table(conn)
         packet = fetch_one(conn, "SELECT * FROM packets WHERE id=?", (packet_id,))
         if not packet:
             raise ValueError("packet not found")
@@ -728,14 +788,54 @@ def apply_revert(db: str, packet_id: str, reviewer: str, confirm: bool = False) 
         conn.execute("INSERT INTO artifact_versions(id,artifact_id,state,path,content_hash,content,parent_version_id,created_at) VALUES(?,?,?,?,?,?,?,?)",
                      (rev_id, artifact["id"], "reverted", artifact["path"], readback, baseline["content"], baseline["id"], now()))
         conn.execute("UPDATE artifacts SET current_hash=? WHERE id=?", (readback, artifact["id"]))
-        return readback
+        receipt_id = new_id("apply")
+        receipt = {
+            "status": "reverted",
+            "receipt_id": receipt_id,
+            "packet_id": packet_id,
+            "reviewer": reviewer,
+            "artifact_id": artifact["id"],
+            "artifact_path": public_path_ref(artifact["path"]),
+            "content_hash": readback,
+            "runtime_config_mutation": "blocked",
+        }
+        conn.execute("""INSERT INTO apply_receipts(id,packet_id,action,reviewer,status,artifact_id,artifact_path,content_hash,runtime_config_mutation,detail_json,created_at)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                     (receipt_id, packet_id, "revert_local", reviewer, "ok", artifact["id"], public_path_ref(artifact["path"]), readback, "blocked", json_dumps(receipt), now()))
+        return receipt
+
+
+PATH_FIELDS_BY_TABLE = {
+    "artifacts": {"path"},
+    "artifact_versions": {"path"},
+    "trace_sources": {"source_path"},
+    "packets": {"packet_json_path", "packet_md_path"},
+    "apply_receipts": {"artifact_path"},
+}
+
+
+def public_export_row(table: str, row: sqlite3.Row) -> dict[str, Any]:
+    item = dict(row)
+    for field in PATH_FIELDS_BY_TABLE.get(table, set()):
+        if field in item and isinstance(item[field], str):
+            item[field] = public_path_ref(item[field])
+    if table == "apply_receipts" and isinstance(item.get("detail_json"), str):
+        try:
+            detail = json.loads(item["detail_json"])
+        except json.JSONDecodeError:
+            detail = None
+        if isinstance(detail, dict) and isinstance(detail.get("artifact_path"), str):
+            detail["artifact_path"] = public_path_ref(detail["artifact_path"])
+            item["detail_json"] = json_dumps(detail)
+    return item
 
 
 def export_db(db: str, out: str) -> None:
     with connect(db) as conn:
+        ensure_apply_receipts_table(conn)
         data = {}
-        for table in ["artifacts", "artifact_versions", "eval_examples", "trace_sources", "runs", "scores", "provider_runs", "plugin_events", "trace_metrics", "gic_signatures", "gates", "packets", "decisions", "waivers", "lineage"]:
-            data[table] = [dict(r) for r in conn.execute(f"SELECT * FROM {table}")]
+        for table in ["artifacts", "artifact_versions", "eval_examples", "trace_sources", "runs", "scores", "provider_runs", "plugin_events", "apply_receipts", "trace_metrics", "gic_signatures", "gates", "packets", "decisions", "waivers", "lineage"]:
+            data[table] = [public_export_row(table, r) for r in conn.execute(f"SELECT * FROM {table}")]
     write_text(out, json_dumps(data) + "\n")
 
 

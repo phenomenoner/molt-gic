@@ -319,11 +319,9 @@ def main(argv: list[str] | None = None) -> int:
             did = record_decision(args.db, args.packet, args.decision, args.reviewer, args.rationale)
             emit({"decision_id": did}, args.json)
         elif args.cmd == "apply" and args.action == "local":
-            h = apply_local(args.db, args.packet, args.reviewer, args.confirm)
-            emit({"status": "applied", "hash": h}, args.json)
+            emit(apply_local(args.db, args.packet, args.reviewer, args.confirm), args.json)
         elif args.cmd == "apply" and args.action == "revert":
-            h = apply_revert(args.db, args.packet, args.reviewer, args.confirm)
-            emit({"status": "reverted", "hash": h}, args.json)
+            emit(apply_revert(args.db, args.packet, args.reviewer, args.confirm), args.json)
         elif args.cmd == "lineage" and args.action == "show":
             with connect(args.db) as conn:
                 rows = [dict(r) for r in conn.execute("SELECT * FROM lineage WHERE artifact_id=? ORDER BY created_at", (args.artifact,))]

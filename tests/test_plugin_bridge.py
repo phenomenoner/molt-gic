@@ -37,3 +37,11 @@ def test_plugin_smoke_requires_confirm_and_blocks_runtime_mutation(tmp_path: Pat
     blocked = cli(tmp_path, "plugin", "smoke", "--db", str(db), "--confirm", "--mutate-runtime-config", "--json", check=False)
     assert blocked.returncode == 7
     assert "runtime_config_mutation_blocked" in blocked.stderr
+
+
+def test_openclaw_apply_receipt_is_explicitly_blocked():
+    source = Path("openclaw-extension/index.ts").read_text(encoding="utf-8")
+    assert 'status: "blocked"' in source
+    assert 'reason: "packet_backed_adapter_required"' in source
+    assert 'runtime_config_mutation: "blocked"' in source
+    assert 'next_safe_action' in source
