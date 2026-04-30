@@ -191,7 +191,7 @@ This repository also includes an OpenClaw-specific helper for operators who have
 uv run python tools/autopacket_openclaw_digest.py
 ```
 
-It calls `moltGic.autonomyDigest`, writes `.molt-gic/triggers/openclaw-autonomy-digest.json`, then runs the same review-only `autopacket` controller. It prints `NO_REPLY` when unchanged and a compact JSON packet receipt when a new packet is built.
+It calls `moltGic.autonomyDigest`, writes raw evidence to `.molt-gic/triggers/openclaw-autonomy-digest.raw.json`, writes a timestamp-normalized semantic trigger to `.molt-gic/triggers/openclaw-autonomy-digest.json`, then runs the same review-only `autopacket` controller. It prints `NO_REPLY` when unchanged and a compact JSON packet receipt when a new packet is built. Packet-built receipts include `human_review` commands so the operator knows how to review, reject, or explicitly confirm apply. See `docs/autopacket-human-review-contract.md`.
 
 ## Rollback
 

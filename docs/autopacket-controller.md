@@ -89,11 +89,11 @@ Use a deterministic scheduled command when possible. Example agent-readable job 
 
 ```text
 Run exactly one command:
-uv run molt-gic autopacket run --db .molt-gic.sqlite --artifact skill:my-skill --trigger-file memory/molt-gic-autonomy-digest.json --out-dir .molt-gic/packets --state-path .molt-gic/autopacket-state.json --json
+python3 /absolute/path/to/tools/autopacket_openclaw_digest.py
 
 Reply rules:
 - If JSON status is noop: reply exactly NO_REPLY.
-- If JSON status is packet_built: reply with packet_md, packet_json, run_id, and recommendation status.
+- If JSON status is packet_built: reply with the packet receipt, including the human_review block.
 - If command fails: reply BLOCKED with command, exit code, stderr summary, and next action.
 - Do not run apply. Do not mutate runtime config.
 ```
@@ -109,6 +109,10 @@ molt-gic apply local --packet <packet_id> --reviewer <name> --confirm
 ```
 
 `apply local` remains packet-backed, confirmed, and constrained to the registered artifact path.
+
+For OpenClaw installations, the scheduled helper adds a `human_review` block to packet-built notifications. That block is the operator handoff: it names the packet paths, states that review is required, and includes example `decision record`, `apply local --confirm`, and `reject` commands. See `docs/autopacket-human-review-contract.md`.
+
+The same helper normalizes the volatile OpenClaw autonomy digest before hashing the trigger. Raw digest evidence is kept separately, while timestamps and receipt timestamps are excluded from the semantic trigger so clock churn does not create duplicate packets.
 
 ## Rollback
 

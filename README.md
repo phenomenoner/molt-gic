@@ -45,7 +45,7 @@ uv run molt-gic autopacket run \
   --json
 ```
 
-`autopacket run` creates review-only candidate/eval/packet artifacts when the trigger changes and returns `status=noop` when it has already processed the same trigger. It never records a promote decision, never applies a packet, and never mutates runtime configuration. See `docs/autopacket-controller.md` and `examples/molt-gic-autopacket/SKILL.md`; the skill folder also includes `golden.jsonl` so installers can prepare a target ledger before scheduling the loop.
+`autopacket run` creates review-only candidate/eval/packet artifacts when the trigger changes and returns `status=noop` when it has already processed the same trigger. It never records a promote decision, never applies a packet, and never mutates runtime configuration. OpenClaw helper notifications include a `human_review` handoff block with review/reject/confirm commands; timestamp churn is normalized out of the trigger. See `docs/autopacket-controller.md`, `docs/autopacket-human-review-contract.md`, and `examples/molt-gic-autopacket/SKILL.md`; the skill folder also includes `golden.jsonl` so installers can prepare a target ledger before scheduling the loop.
 
 
 
