@@ -128,7 +128,7 @@ def test_render_human_review_notice_is_operator_readable():
 
     notice = mod.render_human_review_notice(enriched)
     assert notice.startswith("MOLT-GIC REVIEW REQUIRED")
-    assert "lyria_suggests=reject" in notice
+    assert "executive_suggests=reject" in notice
     assert "summary=" in notice
     assert "rationale=" in notice
     assert "packet_md=/tmp/packet_abc.md" in notice

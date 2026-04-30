@@ -191,7 +191,7 @@ This repository also includes an OpenClaw-specific helper for operators who have
 uv run python tools/autopacket_openclaw_digest.py
 ```
 
-It calls `moltGic.autonomyDigest`, writes raw evidence to `.molt-gic/triggers/openclaw-autonomy-digest.raw.json`, writes a timestamp-normalized semantic trigger to `.molt-gic/triggers/openclaw-autonomy-digest.json`, then runs the same review-only `autopacket` controller. It prints `NO_REPLY` when unchanged and a human-readable `MOLT-GIC REVIEW REQUIRED` notice when a new packet is built. Use `--format json` for machine JSON. Packet-built notices include a deterministic executive summary, `lyria_suggests=reject|approve|revise`, and review/reject/confirm commands so the operator knows how to review, reject, or explicitly confirm apply. See `docs/autopacket-human-review-contract.md`.
+It calls `moltGic.autonomyDigest`, writes raw evidence to `.molt-gic/triggers/openclaw-autonomy-digest.raw.json`, writes a timestamp-normalized semantic trigger to `.molt-gic/triggers/openclaw-autonomy-digest.json`, then runs the same review-only `autopacket` controller. It prints `NO_REPLY` when unchanged and a human-readable `MOLT-GIC REVIEW REQUIRED` notice when a new packet is built. Use `--format json` for machine JSON. Packet-built notices include a deterministic executive summary, `executive_suggests=reject|approve|revise`, and review/reject/confirm commands so the operator knows how to review, reject, or explicitly confirm apply. See `docs/autopacket-human-review-contract.md`.
 
 ## Rollback
 

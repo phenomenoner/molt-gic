@@ -211,7 +211,7 @@ def render_human_review_notice(result: dict) -> str:
         "MOLT-GIC REVIEW REQUIRED",
         f"status={result.get('status')}",
         f"recommendation={result.get('recommendation_status')}",
-        f"lyria_suggests={result.get('executive_review', {}).get('suggested_decision')}",
+        f"executive_suggests={result.get('executive_review', {}).get('suggested_decision')}",
         f"summary={result.get('executive_review', {}).get('summary')}",
         f"rationale={result.get('executive_review', {}).get('rationale')}",
         f"run_id={result.get('run_id')}",
