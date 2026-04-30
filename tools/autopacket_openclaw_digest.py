@@ -15,6 +15,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
 from molt_gic.core import autopacket_run, json_dumps
 
 
@@ -45,11 +50,11 @@ def write_trigger(path: Path, digest: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db", default=".molt-gic.sqlite")
+    parser.add_argument("--db", default=str(REPO_ROOT / ".molt-gic.sqlite"))
     parser.add_argument("--artifact", default="skill:molt-gic-autopacket")
-    parser.add_argument("--trigger-file", default=".molt-gic/triggers/openclaw-autonomy-digest.json")
-    parser.add_argument("--out-dir", default=".molt-gic/packets")
-    parser.add_argument("--state-path", default=".molt-gic/autopacket-state.json")
+    parser.add_argument("--trigger-file", default=str(REPO_ROOT / ".molt-gic/triggers/openclaw-autonomy-digest.json"))
+    parser.add_argument("--out-dir", default=str(REPO_ROOT / ".molt-gic/packets"))
+    parser.add_argument("--state-path", default=str(REPO_ROOT / ".molt-gic/autopacket-state.json"))
     parser.add_argument("--provider", default="fixture")
     parser.add_argument("--judge-provider", default="fixture")
     args = parser.parse_args(argv)
