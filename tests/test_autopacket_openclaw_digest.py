@@ -106,3 +106,26 @@ def test_human_review_handoff_shell_quotes_commands():
     assert "'reviewer name; rm -rf /'" in review["decision_command"]
     assert "'reviewer name; rm -rf /'" in review["apply_command"]
     assert "'reviewer name; rm -rf /'" in review["reject_command"]
+
+
+def test_render_human_review_notice_is_operator_readable():
+    enriched = mod.add_human_review_handoff(
+        {
+            "status": "packet_built",
+            "recommendation_status": "recommend",
+            "run_id": "run_123",
+            "packet_md": "/tmp/packet_abc.md",
+            "packet_json": "/tmp/packet_abc.json",
+        },
+        ".molt-gic.sqlite",
+        "human",
+    )
+
+    notice = mod.render_human_review_notice(enriched)
+    assert notice.startswith("MOLT-GIC REVIEW REQUIRED")
+    assert "packet_md=/tmp/packet_abc.md" in notice
+    assert "Review first. Cron/job must not apply." in notice
+    assert "Reject:" in notice
+    assert "Promote decision:" in notice
+    assert "Apply after promote only:" in notice
+    assert "--confirm" in notice

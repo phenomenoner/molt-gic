@@ -3,7 +3,7 @@
 
 Cron contract:
 - prints NO_REPLY when the digest has already been packeted
-- prints one compact JSON object when a packet is built
+- prints a concise human review notice when a packet is built by default
 - exits non-zero on gateway/ledger/config failures
 """
 
@@ -116,6 +116,30 @@ def add_human_review_handoff(result: dict, db: str, reviewer: str) -> dict:
     return enriched
 
 
+def render_human_review_notice(result: dict) -> str:
+    review = result.get("human_review", {})
+    if result.get("status") != "packet_built" or not review:
+        return json_dumps(result)
+    lines = [
+        "MOLT-GIC REVIEW REQUIRED",
+        f"status={result.get('status')}",
+        f"recommendation={result.get('recommendation_status')}",
+        f"run_id={result.get('run_id')}",
+        f"packet_md={review.get('review_packet')}",
+        f"packet_json={review.get('review_packet_json')}",
+        f"blocked_until={review.get('blocked_until')}",
+        "",
+        "Review first. Cron/job must not apply.",
+        "Reject:",
+        str(review.get("reject_command")),
+        "Promote decision:",
+        str(review.get("decision_command")),
+        "Apply after promote only:",
+        str(review.get("apply_command")),
+    ]
+    return "\n".join(lines)
+
+
 def write_trigger(path: Path, digest: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -134,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--provider", default="fixture")
     parser.add_argument("--judge-provider", default="fixture")
     parser.add_argument("--reviewer", default="human")
+    parser.add_argument("--format", choices=["human", "json"], default="human")
     args = parser.parse_args(argv)
 
     digest = gateway_digest()
@@ -155,7 +180,11 @@ def main(argv: list[str] | None = None) -> int:
     if result.get("status") == "noop":
         print("NO_REPLY")
         return 0
-    print(json_dumps(add_human_review_handoff(result, args.db, args.reviewer)))
+    enriched = add_human_review_handoff(result, args.db, args.reviewer)
+    if args.format == "json":
+        print(json_dumps(enriched))
+    else:
+        print(render_human_review_notice(enriched))
     return 0
 
 

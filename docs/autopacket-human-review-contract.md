@@ -26,7 +26,27 @@ cron schedule
 
 If the normalized trigger is unchanged, the helper prints `NO_REPLY` and the operator is not interrupted.
 
-If a packet is built, the helper prints JSON containing:
+If a packet is built, the helper prints a human-readable notice by default:
+
+```text
+MOLT-GIC REVIEW REQUIRED
+status=packet_built
+recommendation=recommend
+run_id=run_...
+packet_md=...
+packet_json=...
+blocked_until=human_review_and_confirm
+
+Review first. Cron/job must not apply.
+Reject:
+molt-gic decision record ... --decision reject ...
+Promote decision:
+molt-gic decision record ... --decision promote ...
+Apply after promote only:
+molt-gic apply local ... --confirm --json
+```
+
+With `--format json`, the helper prints JSON containing:
 
 ```json
 {
