@@ -25,6 +25,7 @@ molt-gic security scan --path PATH [--json]
 molt-gic adapter discover [--root PATH] [--json]
 molt-gic replay packet --packet PACKET_ID [--out-dir DIR] [--json]
 molt-gic pilot verify --artifact ID [--json]
+molt-gic autopacket run --artifact ID [--trigger-file PATH ...] [--out-dir DIR] [--state-path PATH] [--force] [--json]
 molt-gic provider doctor [--provider fixture] [--json]
 molt-gic trace mine import --artifact ID --file traces.jsonl [--json]
 molt-gic plugin dry-run [--route local] [--json]
@@ -35,6 +36,8 @@ molt-gic dashboard render --snapshot dashboard.json --out dashboard.html [--json
 ```
 
 `--review-only` restricts side effects to ledger and packet artifacts. It never applies local file changes.
+
+`autopacket run` is the installable review-only controller command. It hashes the registered artifact plus optional trigger files; if unchanged since the last successful packet it returns `status=noop`, otherwise it proposes a review-only candidate, evaluates it, builds packet Markdown/JSON, and updates only its state file. It never records a promote decision and never applies local changes.
 
 `apply local` requires both a recorded `promote` decision and `--confirm`. It writes only the registered artifact file, verifies hash readback, records an `apply_receipts` row, and reports `runtime_config_mutation: blocked`. `apply revert` restores the baseline version with the same confirmation and receipt rules.
 

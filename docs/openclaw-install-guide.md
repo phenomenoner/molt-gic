@@ -17,8 +17,11 @@ The extension exposes bounded smoke/inspection surfaces only:
 - command: `/molt-gic evolve`
 - command: `/molt-gic apply`
 - command: `/molt-gic autonomy`
+- optional scheduled command: `molt-gic autopacket run` for review-only packet generation
 
 It does not mutate OpenClaw runtime configuration. Evolve/apply surfaces emit bounded receipts and update the passive autonomy digest; packet-backed local writes remain constrained by the core CLI artifact policy.
+
+For a sharper self-improvement loop, install the optional autopacket controller after the CLI is working. The controller should be scheduled as a deterministic command, not as an open-ended agent instruction. It builds review-only packets from configured trigger files and stops before decision/apply.
 
 ## Prerequisites
 
@@ -146,6 +149,49 @@ Expected:
 - smoke returns a bounded JSON receipt with `surface=command` and `status=ok`.
 - evolve/apply return bounded JSON receipts and update the passive autonomy digest.
 - autonomy returns the current passive digest.
+
+## Optional: enable review-only autopacket generation
+
+Prepare the artifact ledger and golden examples first. Then dry-run the controller manually:
+
+```bash
+molt-gic autopacket run \
+  --db .molt-gic.sqlite \
+  --artifact skill:my-skill \
+  --trigger-file memory/molt-gic-autonomy-digest.json \
+  --out-dir .molt-gic/packets \
+  --state-path .molt-gic/autopacket-state.json \
+  --json
+```
+
+Expected:
+
+- first changed trigger: `status=packet_built` plus `packet_md` and `packet_json`
+- same trigger repeated: `status=noop`
+- no `decision record`, no `apply local`, no runtime config mutation
+
+An OpenClaw cron/worker prompt should say:
+
+```text
+Run exactly one command:
+molt-gic autopacket run --db .molt-gic.sqlite --artifact skill:my-skill --trigger-file memory/molt-gic-autonomy-digest.json --out-dir .molt-gic/packets --state-path .molt-gic/autopacket-state.json --json
+
+Reply rules:
+- If JSON status is noop: reply exactly NO_REPLY.
+- If JSON status is packet_built: reply with packet_md, packet_json, run_id, and recommendation_status.
+- If command fails: reply BLOCKED with command, exit code, stderr summary, and next action.
+- Never run decision record or apply local from this scheduled job.
+```
+
+Install `examples/molt-gic-autopacket/SKILL.md` into the target agent if you want the agent to understand this loop without relying on local tribal knowledge.
+
+This repository also includes an OpenClaw-specific helper for operators who have the gateway extension enabled:
+
+```bash
+uv run python tools/autopacket_openclaw_digest.py
+```
+
+It calls `moltGic.autonomyDigest`, writes `.molt-gic/triggers/openclaw-autonomy-digest.json`, then runs the same review-only `autopacket` controller. It prints `NO_REPLY` when unchanged and a compact JSON packet receipt when a new packet is built.
 
 ## Rollback
 

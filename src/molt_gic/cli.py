@@ -18,6 +18,7 @@ from .core import (
     add_artifact,
     apply_local,
     apply_revert,
+    autopacket_run,
     adapter_discover,
     artifact_rules,
     build_packet,
@@ -77,6 +78,20 @@ def main(argv: list[str] | None = None) -> int:
     p = dashboard_sub.add_parser("export")
     p.add_argument("--db", default=".molt-gic.sqlite")
     p.add_argument("--out", required=True)
+    p.add_argument("--json", action="store_true")
+
+    autopacket = sub.add_parser("autopacket")
+    autopacket_sub = autopacket.add_subparsers(dest="action", required=True)
+    p = autopacket_sub.add_parser("run")
+    p.add_argument("--db", default=".molt-gic.sqlite")
+    p.add_argument("--artifact", required=True)
+    p.add_argument("--trigger-file", action="append", default=[])
+    p.add_argument("--strategy", default="hybrid", choices=["template-mask", "llm-rewrite", "hybrid"])
+    p.add_argument("--out-dir", default=".molt-gic/packets")
+    p.add_argument("--state-path", default=".molt-gic/autopacket-state.json")
+    p.add_argument("--provider", default="fixture")
+    p.add_argument("--judge-provider", default="fixture")
+    p.add_argument("--force", action="store_true")
     p.add_argument("--json", action="store_true")
     p = dashboard_sub.add_parser("render")
     p.add_argument("--snapshot", required=True)
@@ -355,6 +370,8 @@ def main(argv: list[str] | None = None) -> int:
             emit(plugin_smoke(args.db, args.route, args.confirm, args.mutate_runtime_config, args.gateway_url), args.json)
         elif args.cmd == "plugin" and args.action == "hook-spec":
             emit(plugin_hook_spec(args.route), args.json)
+        elif args.cmd == "autopacket" and args.action == "run":
+            emit(autopacket_run(args.db, args.artifact, args.trigger_file, args.strategy, args.out_dir, args.state_path, args.force, args.provider, args.judge_provider), args.json)
         elif args.cmd == "dashboard" and args.action == "export":
             emit(dashboard_export(args.db, args.out), args.json)
         elif args.cmd == "dashboard" and args.action == "render":

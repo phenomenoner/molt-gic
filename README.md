@@ -33,6 +33,20 @@ uv run molt-gic evolve propose --db .molt-gic.sqlite --artifact skill:humanizer-
 uv run molt-gic packet build --db .molt-gic.sqlite --run latest --format md,json
 ```
 
+To install a safe automatic review-packet loop, use `autopacket run` with one or more deterministic trigger files:
+
+```bash
+uv run molt-gic autopacket run \
+  --db .molt-gic.sqlite \
+  --artifact skill:humanizer-zh \
+  --trigger-file memory/molt-gic-autonomy-digest.json \
+  --out-dir .molt-gic/packets \
+  --state-path .molt-gic/autopacket-state.json \
+  --json
+```
+
+`autopacket run` creates review-only candidate/eval/packet artifacts when the trigger changes and returns `status=noop` when it has already processed the same trigger. It never records a promote decision, never applies a packet, and never mutates runtime configuration. See `docs/autopacket-controller.md` and `examples/molt-gic-autopacket/SKILL.md`; the skill folder also includes `golden.jsonl` so installers can prepare a target ledger before scheduling the loop.
+
 
 
 Alternative with standard Python:

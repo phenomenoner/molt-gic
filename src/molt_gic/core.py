@@ -676,6 +676,103 @@ def build_packet(db: str, run_id: str, out_dir: str = ".molt-gic/packets") -> tu
         return str(packet_md_path), str(packet_json_path)
 
 
+def _read_json_file(path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json_dumps(payload) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def autopacket_run(
+    db: str,
+    artifact_id: str,
+    trigger_files: list[str] | None = None,
+    strategy: str = "hybrid",
+    out_dir: str = ".molt-gic/packets",
+    state_path: str = ".molt-gic/autopacket-state.json",
+    force: bool = False,
+    provider_id: str = "fixture",
+    judge_provider_id: str = "fixture",
+) -> dict[str, Any]:
+    """Build a review-only packet when the configured trigger changes.
+
+    This controller deliberately stops at packet generation.  It never records a
+    promote decision and never calls apply_local/apply_revert.
+    """
+    triggers = trigger_files or []
+    with connect(db) as conn:
+        artifact = require_artifact(conn, artifact_id)
+        artifact_path = Path(artifact["path"]).resolve(strict=True)
+        artifact_hash = sha256_file(artifact_path)
+        trigger_payload = []
+        for raw in triggers:
+            p = Path(raw).resolve(strict=True)
+            trigger_payload.append({"path": public_path_ref(str(p)), "sha256": sha256_file(p)})
+        trigger_hash = sha256_text(json_dumps({
+            "artifact_id": artifact_id,
+            "artifact_hash": artifact_hash,
+            "strategy": strategy,
+            "trigger_files": trigger_payload,
+            "mode": "review_only",
+        }))
+
+    state_file = Path(state_path)
+    state = _read_json_file(state_file)
+    if not force and state.get("last_trigger_hash") == trigger_hash:
+        return {
+            "status": "noop",
+            "reason": "trigger_unchanged",
+            "mode": "review_only",
+            "artifact_id": artifact_id,
+            "trigger_hash": trigger_hash,
+            "state_path": str(state_file),
+            "apply_policy": "blocked_until_explicit_decision_and_confirm",
+        }
+
+    candidate_path = propose_candidate(db, artifact_id, strategy=strategy, review_only=True)
+    run_id = evaluate_run(
+        db,
+        artifact_id,
+        "candidate",
+        str(artifact_path),
+        candidate_path,
+        review_only=True,
+        provider_id=provider_id,
+        judge_provider_id=judge_provider_id,
+    )
+    packet_md, packet_json = build_packet(db, run_id, out_dir)
+    with connect(db) as conn:
+        run = fetch_one(conn, "SELECT recommendation_status FROM runs WHERE id=?", (run_id,))
+    result = {
+        "status": "packet_built",
+        "mode": "review_only",
+        "artifact_id": artifact_id,
+        "trigger_hash": trigger_hash,
+        "candidate_path": candidate_path,
+        "run_id": run_id,
+        "recommendation_status": run["recommendation_status"] if run else None,
+        "packet_md": packet_md,
+        "packet_json": packet_json,
+        "state_path": str(state_file),
+        "apply_policy": "blocked_until_explicit_decision_and_confirm",
+    }
+    state.update({
+        "schema": "molt-gic.autopacket.state.v1",
+        "updated_at": now(),
+        "last_trigger_hash": trigger_hash,
+        "last_result": result,
+    })
+    _write_json_atomic(state_file, state)
+    return result
+
+
 def record_decision(db: str, packet_id: str, decision: str, reviewer: str, rationale: str) -> str:
     if decision not in {"promote", "revise", "reject"}:
         raise ValueError("invalid decision")

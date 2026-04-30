@@ -68,6 +68,32 @@ def test_happy_path_review_packet(tmp_path: Path):
     assert json.loads(gates.stdout)["gates"]
 
 
+def test_autopacket_run_builds_once_per_trigger(tmp_path: Path):
+    skill, data = write_fixture(tmp_path)
+    trigger = tmp_path / "digest.json"
+    trigger.write_text('{"status":"ok","seq":1}\n', encoding="utf-8")
+    db = tmp_path / "molt.sqlite"
+    run_cli(tmp_path, "init", "--db", str(db), "--json")
+    add = run_cli(tmp_path, "artifact", "add", "--db", str(db), "--type", "skill", "--path", str(skill), "--name", "humanizer-zh", "--json")
+    artifact_id = json.loads(add.stdout)["artifact_id"]
+    run_cli(tmp_path, "dataset", "import", "--db", str(db), "--artifact", artifact_id, "--source", "golden", "--file", str(data), "--json")
+
+    first = json.loads(run_cli(tmp_path, "autopacket", "run", "--db", str(db), "--artifact", artifact_id, "--trigger-file", str(trigger), "--state-path", "state/autopacket.json", "--json").stdout)
+    assert first["status"] == "packet_built"
+    assert first["mode"] == "review_only"
+    assert first["apply_policy"] == "blocked_until_explicit_decision_and_confirm"
+    assert Path(tmp_path / first["packet_json"]).exists()
+
+    second = json.loads(run_cli(tmp_path, "autopacket", "run", "--db", str(db), "--artifact", artifact_id, "--trigger-file", str(trigger), "--state-path", "state/autopacket.json", "--json").stdout)
+    assert second["status"] == "noop"
+    assert second["reason"] == "trigger_unchanged"
+
+    trigger.write_text('{"status":"ok","seq":2}\n', encoding="utf-8")
+    third = json.loads(run_cli(tmp_path, "autopacket", "run", "--db", str(db), "--artifact", artifact_id, "--trigger-file", str(trigger), "--state-path", "state/autopacket.json", "--json").stdout)
+    assert third["status"] == "packet_built"
+    assert third["trigger_hash"] != first["trigger_hash"]
+
+
 def test_unknown_artifact_type_fails_validation(tmp_path: Path):
     skill, _ = write_fixture(tmp_path)
     db = tmp_path / "molt.sqlite"
