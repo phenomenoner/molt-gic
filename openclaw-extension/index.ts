@@ -6,7 +6,7 @@ import path from "node:path";
 type Config = {
   enabled?: boolean;
   routePath?: string;
-  autonomyDigest?: { enabled?: boolean; path?: string };
+  autonomyDigest?: { enabled?: boolean; path?: string; promptContextEnabled?: boolean };
   enableEvolveApplyCommands?: boolean;
 };
 
@@ -78,7 +78,7 @@ function defaultDigest(): AutonomyDigest {
     evaluation: "no receipt evaluated yet",
     suggested_evolution: "run /molt-gic smoke or moltGic.smoke to seed the loop",
     next_safe_action: "/molt-gic smoke",
-    apply_policy: "bounded; runtime config mutation blocked; apply emits receipt",
+    apply_policy: "molt-gic apply surface is bounded; runtime config mutation is not performed by molt-gic",
     receipts: [],
   };
 }
@@ -107,7 +107,7 @@ function updateDigest(digestPath: string, receipt: Record<string, unknown>, acti
     evaluation: `latest receipt status=${String(receipt.status ?? "unknown")}, schema=${String(receipt.schema ?? "unknown")}`,
     suggested_evolution: "if this receipt is expected, propose the next smallest review-only packet; otherwise investigate before apply",
     next_safe_action: "/molt-gic evolve --review-only",
-    apply_policy: "direct OpenClaw apply is blocked; use packet-backed CLI apply with confirm; runtime config mutation remains blocked",
+    apply_policy: "molt-gic apply is packet-backed and requires explicit confirm; runtime config mutation is not performed by molt-gic",
     receipts,
   };
   writeDigest(digestPath, digest);
@@ -122,7 +122,8 @@ function formatDigest(digest: AutonomyDigest): string {
     `evaluation: ${digest.evaluation}`,
     `suggested evolution: ${digest.suggested_evolution}`,
     `next safe action: ${digest.next_safe_action}`,
-    `apply policy: ${digest.apply_policy}`,
+    "scope: molt-gic bridge status only; not a global OpenClaw runtime policy",
+    `molt-gic apply policy: ${digest.apply_policy}`,
   ].join("\n");
 }
 
@@ -149,7 +150,7 @@ function buildApplyReceipt(routePath: string, params: Record<string, unknown> | 
     applied: false,
     reason: "packet_backed_adapter_required",
     next_safe_action: "run molt-gic apply local --packet <id> --reviewer <name> --confirm, then smoke and revert if needed",
-    runtime_config_mutation: "blocked",
+    runtime_config_mutation: "blocked_for_molt_gic_apply_surface",
     ts: new Date().toISOString(),
   };
 }
@@ -159,6 +160,7 @@ export default function register(api: OpenClawPluginApi) {
   if (cfg.enabled === false) return;
   const routePath = typeof cfg.routePath === "string" && cfg.routePath.startsWith("/") ? cfg.routePath : "/molt-gic/hook";
   const digestEnabled = cfg.autonomyDigest?.enabled !== false;
+  const promptContextEnabled = cfg.autonomyDigest?.promptContextEnabled !== false;
   const digestPath = safeDigestPath(api, cfg);
   const evolveApplyEnabled = cfg.enableEvolveApplyCommands !== false;
 
@@ -194,9 +196,10 @@ export default function register(api: OpenClawPluginApi) {
       route: routePath,
       http_route: true,
       methods: ["moltGic.status", "moltGic.smoke", "moltGic.evolve", "moltGic.apply", "moltGic.autonomyDigest"],
-      runtime_config_mutation: "blocked",
+      runtime_config_mutation: "blocked_for_molt_gic_apply_surface",
       command_surface: "/molt-gic status|smoke|evolve|apply|autonomy|help",
       autonomy_digest: digestEnabled,
+      prompt_context_digest: promptContextEnabled,
       evolve_apply_enabled: evolveApplyEnabled,
     });
   });
@@ -225,7 +228,7 @@ export default function register(api: OpenClawPluginApi) {
 
   try {
     api.on("before_prompt_build" as any, async () => {
-      if (!digestEnabled) return {};
+      if (!digestEnabled || !promptContextEnabled) return {};
       const digest = readDigest(digestPath);
       if (digest.receipts.length === 0) return {};
       return { prependSystemContext: formatDigest(digest) };
@@ -253,7 +256,7 @@ export default function register(api: OpenClawPluginApi) {
     handler: async (ctx) => {
       const action = (ctx.args?.trim().split(/\s+/).filter(Boolean)[0] ?? "status").toLowerCase();
       if (action === "help") {
-        return { text: "molt-gic commands: /molt-gic status, smoke, evolve, apply, autonomy. Runtime config mutation remains blocked." };
+        return { text: "molt-gic commands: /molt-gic status, smoke, evolve, apply, autonomy. Runtime config mutation is not performed by the molt-gic apply surface." };
       }
       if (action === "status") {
         return { text: [
@@ -262,8 +265,9 @@ export default function register(api: OpenClawPluginApi) {
           "Gateway RPC: moltGic.status, smoke, evolve, apply, autonomyDigest",
           "Command surface: /molt-gic status, smoke, evolve, apply, autonomy",
           `Passive autonomy digest: ${digestEnabled ? "enabled" : "disabled"}`,
+          `Prompt context digest: ${promptContextEnabled ? "enabled" : "disabled"}`,
           `Evolve/apply command surface: ${evolveApplyEnabled ? "enabled" : "disabled"}`,
-          "Runtime config mutation: blocked",
+          "Runtime config mutation: blocked for molt-gic apply surface only",
         ].join("\n") };
       }
       if (action === "smoke") {

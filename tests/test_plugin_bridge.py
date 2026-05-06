@@ -43,5 +43,12 @@ def test_openclaw_apply_receipt_is_explicitly_blocked():
     source = Path("openclaw-extension/index.ts").read_text(encoding="utf-8")
     assert 'status: "blocked"' in source
     assert 'reason: "packet_backed_adapter_required"' in source
-    assert 'runtime_config_mutation: "blocked"' in source
+    assert 'runtime_config_mutation: "blocked_for_molt_gic_apply_surface"' in source
     assert 'next_safe_action' in source
+
+
+def test_openclaw_prompt_digest_policy_is_scoped_not_global():
+    source = Path("openclaw-extension/index.ts").read_text(encoding="utf-8")
+    assert "not a global OpenClaw runtime policy" in source
+    assert "molt-gic apply policy" in source
+    assert "runtime config mutation remains blocked" not in source

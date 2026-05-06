@@ -112,7 +112,7 @@ molt-gic apply local --packet <packet_id> --reviewer <name> --confirm
 
 For OpenClaw installations, the scheduled helper adds a `human_review` block to packet-built notifications. That block is the operator handoff: it names the packet paths, states that review is required, and includes example `decision record`, `apply local --confirm`, and `reject` commands. See `docs/autopacket-human-review-contract.md`.
 
-The same helper normalizes the volatile OpenClaw autonomy digest before hashing the trigger. Raw digest evidence is kept separately, while timestamps and receipt timestamps are excluded from the semantic trigger so clock churn does not create duplicate packets.
+The same helper normalizes the volatile OpenClaw autonomy digest before hashing the trigger. Raw digest evidence is kept separately, while timestamps and receipt timestamps are excluded from the semantic trigger so clock churn does not create duplicate packets. The helper uses a 30s OpenClaw gateway CLI timeout and 3 attempts by default; override with `MOLT_GIC_OPENCLAW_GATEWAY_TIMEOUT_MS`, `OPENCLAW_GATEWAY_TIMEOUT_MS`, or `MOLT_GIC_OPENCLAW_GATEWAY_ATTEMPTS` on slower or intermittently closing hosts.
 
 ## Rollback
 

@@ -11,6 +11,38 @@ assert spec and spec.loader
 spec.loader.exec_module(mod)
 
 
+def test_gateway_timeout_defaults_to_30s(monkeypatch):
+    monkeypatch.delenv("MOLT_GIC_OPENCLAW_GATEWAY_TIMEOUT_MS", raising=False)
+    monkeypatch.delenv("OPENCLAW_GATEWAY_TIMEOUT_MS", raising=False)
+
+    assert mod._gateway_timeout_ms() == 30_000
+
+
+def test_gateway_timeout_can_be_overridden(monkeypatch):
+    monkeypatch.setenv("MOLT_GIC_OPENCLAW_GATEWAY_TIMEOUT_MS", "45000")
+
+    assert mod._gateway_timeout_ms() == 45_000
+
+
+def test_gateway_timeout_rejects_too_small(monkeypatch):
+    monkeypatch.setenv("MOLT_GIC_OPENCLAW_GATEWAY_TIMEOUT_MS", "999")
+
+    try:
+        mod._gateway_timeout_ms()
+    except RuntimeError as exc:
+        assert "too small" in str(exc)
+    else:  # pragma: no cover - explicit assertion keeps this pytest-version agnostic
+        raise AssertionError("expected RuntimeError")
+
+
+def test_gateway_attempts_default_and_override(monkeypatch):
+    monkeypatch.delenv("MOLT_GIC_OPENCLAW_GATEWAY_ATTEMPTS", raising=False)
+    assert mod._gateway_attempts() == 3
+
+    monkeypatch.setenv("MOLT_GIC_OPENCLAW_GATEWAY_ATTEMPTS", "5")
+    assert mod._gateway_attempts() == 5
+
+
 def test_normalize_digest_ignores_volatile_timestamps():
     base = {
         "schema": "molt-gic.autonomy.digest.v1",

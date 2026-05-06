@@ -15,6 +15,28 @@
       "routePath": {
         "type": "string",
         "default": "/molt-gic/hook"
+      },
+      "autonomyDigest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "path": {
+            "type": "string",
+            "default": "memory/molt-gic-autonomy-digest.json"
+          },
+          "promptContextEnabled": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "enableEvolveApplyCommands": {
+        "type": "boolean",
+        "default": true
       }
     }
   }

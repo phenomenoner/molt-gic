@@ -15,6 +15,7 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -27,24 +28,78 @@ from molt_gic.core import autopacket_run, json_dumps
 
 
 SEMANTIC_DIGEST_SCHEMA = "molt-gic.autopacket.openclaw-digest-trigger.v1"
+DEFAULT_GATEWAY_TIMEOUT_MS = 30_000
+DEFAULT_GATEWAY_ATTEMPTS = 3
+
+
+def _positive_int_from_env(primary: str, fallback: str | None, default: int, label: str, minimum: int) -> int:
+    raw = os.getenv(primary) or (os.getenv(fallback) if fallback else None)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"invalid {label}: {raw!r}") from exc
+    if value < minimum:
+        raise RuntimeError(f"{label} too small: {value}")
+    return value
+
+
+def _gateway_timeout_ms() -> int:
+    return _positive_int_from_env(
+        "MOLT_GIC_OPENCLAW_GATEWAY_TIMEOUT_MS",
+        "OPENCLAW_GATEWAY_TIMEOUT_MS",
+        DEFAULT_GATEWAY_TIMEOUT_MS,
+        "gateway timeout ms",
+        1_000,
+    )
+
+
+def _gateway_attempts() -> int:
+    return _positive_int_from_env(
+        "MOLT_GIC_OPENCLAW_GATEWAY_ATTEMPTS",
+        None,
+        DEFAULT_GATEWAY_ATTEMPTS,
+        "gateway attempts",
+        1,
+    )
+
+
+def _gateway_call_once(gateway_timeout_ms: int) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            "openclaw",
+            "gateway",
+            "call",
+            "moltGic.autonomyDigest",
+            "--json",
+            "--timeout",
+            str(gateway_timeout_ms),
+        ],
+        text=True,
+        capture_output=True,
+        timeout=(gateway_timeout_ms / 1000) + 10,
+    )
 
 
 def gateway_digest() -> dict:
-    proc = subprocess.run(
-        ["openclaw", "gateway", "call", "moltGic.autonomyDigest", "--json"],
-        text=True,
-        capture_output=True,
-        timeout=30,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(f"gateway autonomyDigest failed exit={proc.returncode} stderr={proc.stderr.strip()[:500]}")
-    try:
-        payload = json.loads(proc.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"gateway autonomyDigest returned invalid JSON: {exc}") from exc
-    if payload.get("schema") != "molt-gic.autonomy.digest.v1":
-        raise RuntimeError(f"unexpected digest schema: {payload.get('schema')!r}")
-    return payload
+    gateway_timeout_ms = _gateway_timeout_ms()
+    attempts = _gateway_attempts()
+    last_error = ""
+    for attempt in range(1, attempts + 1):
+        proc = _gateway_call_once(gateway_timeout_ms)
+        if proc.returncode == 0:
+            try:
+                payload = json.loads(proc.stdout)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"gateway autonomyDigest returned invalid JSON: {exc}") from exc
+            if payload.get("schema") != "molt-gic.autonomy.digest.v1":
+                raise RuntimeError(f"unexpected digest schema: {payload.get('schema')!r}")
+            return payload
+        last_error = proc.stderr.strip()[:500]
+        if attempt < attempts:
+            time.sleep(min(2 * attempt, 5))
+    raise RuntimeError(f"gateway autonomyDigest failed attempts={attempts} stderr={last_error}")
 
 
 def normalize_digest_for_trigger(digest: dict) -> dict:

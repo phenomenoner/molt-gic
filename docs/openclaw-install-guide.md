@@ -19,7 +19,7 @@ The extension exposes bounded smoke/inspection surfaces only:
 - command: `/molt-gic autonomy`
 - optional scheduled command: `molt-gic autopacket run` for review-only packet generation
 
-It does not mutate OpenClaw runtime configuration. Evolve/apply surfaces emit bounded receipts and update the passive autonomy digest; packet-backed local writes remain constrained by the core CLI artifact policy.
+It does not mutate OpenClaw runtime configuration. Evolve/apply surfaces emit bounded receipts and update the passive autonomy digest; packet-backed local writes remain constrained by the core CLI artifact policy. Any runtime-config language emitted by this extension is scoped to the `molt-gic` bridge/apply surface and must not be treated as a global OpenClaw security or operator policy.
 
 For a sharper self-improvement loop, install the optional autopacket controller after the CLI is working. The controller should be scheduled as a deterministic command, not as an open-ended agent instruction. It builds review-only packets from configured trigger files and stops before decision/apply.
 
@@ -72,6 +72,15 @@ Enable the passive digest hook access:
 ```bash
 openclaw config set plugins.entries.molt-gic-openclaw-extension.hooks.allowConversationAccess true --strict-json
 ```
+
+Optional prompt-context control:
+
+```bash
+# keep digest receipts/API available, but stop injecting the digest into prompt context
+openclaw config set plugins.entries.molt-gic-openclaw-extension.config.autonomyDigest.promptContextEnabled false --strict-json
+```
+
+Default behavior keeps prompt-context digest enabled for the self-improvement loop, but the injected text is status-only and explicitly scoped to `molt-gic`; it is not a global runtime mutation policy.
 
 Expected inspect summary:
 
@@ -145,7 +154,7 @@ After gateway restart, send these from an authorized OpenClaw chat surface:
 
 Expected:
 
-- status reports the HTTP route, Gateway RPC methods, and blocked runtime config mutation.
+- status reports the HTTP route, Gateway RPC methods, and that runtime config mutation is blocked only for the `molt-gic` apply surface.
 - smoke returns a bounded JSON receipt with `surface=command` and `status=ok`.
 - evolve/apply return bounded JSON receipts and update the passive autonomy digest.
 - autonomy returns the current passive digest.
@@ -168,7 +177,7 @@ Expected:
 
 - first changed trigger: `status=packet_built` plus `packet_md` and `packet_json`
 - same trigger repeated: `status=noop`
-- no `decision record`, no `apply local`, no runtime config mutation
+- no `decision record`, no `apply local`, no runtime config mutation by the `molt-gic` autopacket/apply surface
 
 An OpenClaw cron/worker prompt should say:
 
@@ -191,7 +200,7 @@ This repository also includes an OpenClaw-specific helper for operators who have
 uv run python tools/autopacket_openclaw_digest.py
 ```
 
-It calls `moltGic.autonomyDigest`, writes raw evidence to `.molt-gic/triggers/openclaw-autonomy-digest.raw.json`, writes a timestamp-normalized semantic trigger to `.molt-gic/triggers/openclaw-autonomy-digest.json`, then runs the same review-only `autopacket` controller. It prints `NO_REPLY` when unchanged and a human-readable `MOLT-GIC REVIEW REQUIRED` notice when a new packet is built. Use `--format json` for machine JSON. Packet-built notices include a deterministic executive summary, `executive_suggests=reject|approve|revise`, and review/reject/confirm commands so the operator knows how to review, reject, or explicitly confirm apply. See `docs/autopacket-human-review-contract.md`.
+It calls `moltGic.autonomyDigest`, writes raw evidence to `.molt-gic/triggers/openclaw-autonomy-digest.raw.json`, writes a timestamp-normalized semantic trigger to `.molt-gic/triggers/openclaw-autonomy-digest.json`, then runs the same review-only `autopacket` controller. It prints `NO_REPLY` when unchanged and a human-readable `MOLT-GIC REVIEW REQUIRED` notice when a new packet is built. Use `--format json` for machine JSON. Packet-built notices include a deterministic executive summary, `executive_suggests=reject|approve|revise`, and review/reject/confirm commands so the operator knows how to review, reject, or explicitly confirm apply. The helper gives the gateway call a 30s CLI timeout and 3 attempts by default; override with `MOLT_GIC_OPENCLAW_GATEWAY_TIMEOUT_MS`, `OPENCLAW_GATEWAY_TIMEOUT_MS`, or `MOLT_GIC_OPENCLAW_GATEWAY_ATTEMPTS` if the host needs different read tolerance. See `docs/autopacket-human-review-contract.md`.
 
 ## Rollback
 
